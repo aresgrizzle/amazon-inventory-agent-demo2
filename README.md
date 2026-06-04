@@ -193,6 +193,8 @@ GET /api/ai/task-priority
 
 配置 OpenAI 后，接口会返回中文运营分析内容。AI 不会重新计算库存风险，只解释系统已经计算出的规则结果。
 
+后端优先使用 OpenAI Responses API。如果中转站没有开放 `/v1/responses`，系统会自动降级到 Chat Completions API，以兼容更多 OpenAI-style 服务。
+
 ## 线上部署
 
 后端 Railway 启动命令：

@@ -73,7 +73,36 @@ def _call_openai(prompt: str) -> str:
             return str(output_text).strip()
         return _extract_response_text(response)
     except Exception as exc:
+        if _should_fallback_to_chat_completions(exc):
+            try:
+                return _call_chat_completions(client, prompt)
+            except Exception as chat_exc:
+                raise RuntimeError(
+                    f"OpenAI request failed: {chat_exc.__class__.__name__}"
+                ) from chat_exc
         raise RuntimeError(f"OpenAI request failed: {exc.__class__.__name__}") from exc
+
+
+def _should_fallback_to_chat_completions(exc: Exception) -> bool:
+    status_code = getattr(exc, "status_code", None)
+    return exc.__class__.__name__ == "NotFoundError" or status_code == 404
+
+
+def _call_chat_completions(client: Any, prompt: str) -> str:
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": "你是资深 Amazon 库存运营负责人，只用中文回答。",
+            },
+            {"role": "user", "content": prompt},
+        ],
+    )
+    content = response.choices[0].message.content if response.choices else None
+    if not content:
+        raise RuntimeError("OpenAI returned an empty response")
+    return str(content).strip()
 
 
 def _extract_response_text(response: Any) -> str:
