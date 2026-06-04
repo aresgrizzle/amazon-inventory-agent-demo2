@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.app.api.ai import router as ai_router
 from backend.app.api.agent import router as agent_router
 from backend.app.api.dashboard import router as dashboard_router
 from backend.app.api.inventory import router as inventory_router
@@ -30,6 +31,7 @@ app.include_router(dashboard_router)
 app.include_router(inventory_router)
 app.include_router(tasks_router)
 app.include_router(agent_router)
+app.include_router(ai_router)
 
 
 @app.get("/")

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getSkuAiAnalysis } from "../api/aiApi.js";
 import { fetchSkuAnalysis } from "../api/inventoryApi.js";
 import RiskBadge from "../components/RiskBadge.jsx";
 
@@ -24,10 +25,31 @@ function formatValue(value) {
   return value;
 }
 
+function SkuAiPanel({ data, loading, error }) {
+  return (
+    <section className="ai-panel">
+      <div className="ai-panel-header">
+        <h2>AI Analysis</h2>
+        {data?.generated_at && <span>{new Date(data.generated_at).toLocaleString()}</span>}
+      </div>
+      {loading && <div className="state-line">Loading AI analysis...</div>}
+      {!loading && error && <div className="error-line">{error}</div>}
+      {!loading && !error && data?.configured === false && (
+        <div className="state-line">AI analysis is not configured.</div>
+      )}
+      {!loading && !error && data?.error && <div className="error-line">{data.error}</div>}
+      {!loading && !error && data?.analysis && <p className="ai-content">{data.analysis}</p>}
+    </section>
+  );
+}
+
 function SkuDetail({ sellerSku, onBack }) {
   const [detail, setDetail] = useState(null);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [aiLoading, setAiLoading] = useState(true);
   const [error, setError] = useState("");
+  const [aiError, setAiError] = useState("");
 
   useEffect(() => {
     async function loadDetail() {
@@ -36,12 +58,26 @@ function SkuDetail({ sellerSku, onBack }) {
       try {
         setDetail(await fetchSkuAnalysis(sellerSku));
       } catch (err) {
-        setError(err.message || "SKU 详情加载失败");
+        setError(err.message || "SKU detail failed to load");
       } finally {
         setLoading(false);
       }
     }
+
+    async function loadAiAnalysis() {
+      setAiLoading(true);
+      setAiError("");
+      try {
+        setAiAnalysis(await getSkuAiAnalysis(sellerSku));
+      } catch (err) {
+        setAiError(err.message || "AI analysis failed to load");
+      } finally {
+        setAiLoading(false);
+      }
+    }
+
     loadDetail();
+    loadAiAnalysis();
   }, [sellerSku]);
 
   return (
@@ -84,6 +120,7 @@ function SkuDetail({ sellerSku, onBack }) {
             <h2>建议原因</h2>
             <p>{detail.action_reason || "暂无建议原因"}</p>
           </section>
+          <SkuAiPanel data={aiAnalysis} loading={aiLoading} error={aiError} />
         </div>
       )}
     </section>

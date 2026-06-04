@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getTaskAiPriority } from "../api/aiApi.js";
 import { fetchTasks, ignoreTask, resolveTask } from "../api/taskApi.js";
 import TaskCard from "../components/TaskCard.jsx";
 
@@ -13,6 +14,24 @@ const taskTypes = [
 const taskStatuses = ["", "pending", "resolved", "ignored"];
 const priorities = ["", "P0", "P1", "P2", "P3"];
 
+function TaskAiPanel({ data, loading, error }) {
+  return (
+    <section className="ai-panel">
+      <div className="ai-panel-header">
+        <h2>AI Priority Suggestion</h2>
+        {data?.generated_at && <span>{new Date(data.generated_at).toLocaleString()}</span>}
+      </div>
+      {loading && <div className="state-line">Loading AI priority suggestion...</div>}
+      {!loading && error && <div className="error-line">{error}</div>}
+      {!loading && !error && data?.configured === false && (
+        <div className="state-line">AI priority suggestion is not configured.</div>
+      )}
+      {!loading && !error && data?.error && <div className="error-line">{data.error}</div>}
+      {!loading && !error && data?.suggestion && <p className="ai-content">{data.suggestion}</p>}
+    </section>
+  );
+}
+
 function TaskList({ reloadKey, onTaskUpdated }) {
   const [tasks, setTasks] = useState([]);
   const [filters, setFilters] = useState({
@@ -21,9 +40,12 @@ function TaskList({ reloadKey, onTaskUpdated }) {
     priority: "",
     seller_sku: "",
   });
+  const [aiPriority, setAiPriority] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [aiLoading, setAiLoading] = useState(true);
   const [busyTaskId, setBusyTaskId] = useState("");
   const [error, setError] = useState("");
+  const [aiError, setAiError] = useState("");
 
   async function loadTasks(nextFilters = filters) {
     setLoading(true);
@@ -31,14 +53,27 @@ function TaskList({ reloadKey, onTaskUpdated }) {
     try {
       setTasks(await fetchTasks(nextFilters));
     } catch (err) {
-      setError(err.message || "任务数据加载失败");
+      setError(err.message || "Task data failed to load");
     } finally {
       setLoading(false);
     }
   }
 
+  async function loadAiPriority() {
+    setAiLoading(true);
+    setAiError("");
+    try {
+      setAiPriority(await getTaskAiPriority());
+    } catch (err) {
+      setAiError(err.message || "AI priority suggestion failed to load");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadTasks();
+    loadAiPriority();
   }, [reloadKey]);
 
   function updateFilter(name, value) {
@@ -57,9 +92,10 @@ function TaskList({ reloadKey, onTaskUpdated }) {
         await ignoreTask(taskId);
       }
       await loadTasks();
+      await loadAiPriority();
       onTaskUpdated();
     } catch (err) {
-      setError(err.message || "任务状态更新失败");
+      setError(err.message || "Task status update failed");
     } finally {
       setBusyTaskId("");
     }
@@ -97,6 +133,8 @@ function TaskList({ reloadKey, onTaskUpdated }) {
           ))}
         </select>
       </div>
+
+      <TaskAiPanel data={aiPriority} loading={aiLoading} error={aiError} />
 
       {loading && <div className="state-line">Loading...</div>}
       {error && <div className="error-line">{error}</div>}

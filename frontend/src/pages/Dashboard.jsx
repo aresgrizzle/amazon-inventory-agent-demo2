@@ -1,12 +1,34 @@
 import { useEffect, useState } from "react";
+import { getDashboardAiSummary } from "../api/aiApi.js";
 import { fetchDashboardSummary, runInventoryAgent } from "../api/dashboardApi.js";
 import MetricCard from "../components/MetricCard.jsx";
 
+function AiPanel({ data, loading, error }) {
+  return (
+    <section className="ai-panel">
+      <div className="ai-panel-header">
+        <h2>AI Summary</h2>
+        {data?.generated_at && <span>{new Date(data.generated_at).toLocaleString()}</span>}
+      </div>
+      {loading && <div className="state-line">Loading AI summary...</div>}
+      {!loading && error && <div className="error-line">{error}</div>}
+      {!loading && !error && data?.configured === false && (
+        <div className="state-line">AI summary is not configured.</div>
+      )}
+      {!loading && !error && data?.error && <div className="error-line">{data.error}</div>}
+      {!loading && !error && data?.summary && <p className="ai-content">{data.summary}</p>}
+    </section>
+  );
+}
+
 function Dashboard({ reloadKey, onAgentRun }) {
   const [summary, setSummary] = useState(null);
+  const [aiSummary, setAiSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [aiLoading, setAiLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
+  const [aiError, setAiError] = useState("");
   const [message, setMessage] = useState("");
 
   async function loadSummary() {
@@ -15,14 +37,27 @@ function Dashboard({ reloadKey, onAgentRun }) {
     try {
       setSummary(await fetchDashboardSummary());
     } catch (err) {
-      setError(err.message || "Dashboard 数据加载失败");
+      setError(err.message || "Dashboard data failed to load");
     } finally {
       setLoading(false);
     }
   }
 
+  async function loadAiSummary() {
+    setAiLoading(true);
+    setAiError("");
+    try {
+      setAiSummary(await getDashboardAiSummary());
+    } catch (err) {
+      setAiError(err.message || "AI summary failed to load");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadSummary();
+    loadAiSummary();
   }, [reloadKey]);
 
   async function handleRunAgent() {
@@ -33,9 +68,10 @@ function Dashboard({ reloadKey, onAgentRun }) {
       const result = await runInventoryAgent();
       setMessage(`${result.message}: analyzed ${result.analyzed_skus}, tasks ${result.generated_tasks}`);
       await loadSummary();
+      await loadAiSummary();
       onAgentRun();
     } catch (err) {
-      setError(err.message || "库存 Agent 运行失败");
+      setError(err.message || "Inventory Agent failed to run");
     } finally {
       setRunning(false);
     }
@@ -68,6 +104,8 @@ function Dashboard({ reloadKey, onAgentRun }) {
           <MetricCard label="总任务数" value={summary.total_tasks} />
         </div>
       )}
+
+      <AiPanel data={aiSummary} loading={aiLoading} error={aiError} />
     </section>
   );
 }

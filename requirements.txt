@@ -5,3 +5,4 @@ openpyxl
 python-dotenv
 fastapi
 uvicorn
+openai

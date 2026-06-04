@@ -130,6 +130,7 @@ p {
   display: grid;
   grid-template-columns: repeat(7, minmax(140px, 1fr));
   gap: 12px;
+  margin-bottom: 14px;
 }
 
 .metric-card {
@@ -424,6 +425,39 @@ p {
   margin: 0;
   color: #475467;
   line-height: 1.6;
+}
+
+.ai-panel {
+  margin: 14px 0;
+  border: 1px solid #d9e0e7;
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+}
+
+.ai-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.ai-panel-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.ai-panel-header span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.ai-content {
+  margin: 0;
+  color: #344054;
+  line-height: 1.7;
+  white-space: pre-wrap;
 }
 
 .state-line,
