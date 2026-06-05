@@ -15,6 +15,7 @@ from backend.app.core.config import (
 
 AI_NOT_CONFIGURED_MESSAGE = "OpenAI is not configured"
 AI_REQUEST_TIMEOUT_SECONDS = 18.0
+AI_MAX_TOKENS = 1000
 
 
 def is_ai_configured() -> bool:
@@ -58,15 +59,27 @@ def _call_openai(prompt: str) -> str:
     except ImportError as exc:
         raise RuntimeError("OpenAI SDK is not installed") from exc
 
+    client = OpenAI(
+        api_key=OPENAI_API_KEY,
+        base_url=OPENAI_BASE_URL,
+        timeout=AI_REQUEST_TIMEOUT_SECONDS,
+    )
+
     try:
-        client = OpenAI(
-            api_key=OPENAI_API_KEY,
-            base_url=OPENAI_BASE_URL,
-            timeout=AI_REQUEST_TIMEOUT_SECONDS,
-        )
         response = client.responses.create(
             model=OPENAI_MODEL,
-            input=prompt,
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": prompt,
+                        }
+                    ],
+                }
+            ],
+            extra_body={"max_tokens": AI_MAX_TOKENS},
         )
         output_text = getattr(response, "output_text", None)
         if output_text:
@@ -98,6 +111,7 @@ def _call_chat_completions(client: Any, prompt: str) -> str:
             },
             {"role": "user", "content": prompt},
         ],
+        extra_body={"max_tokens": AI_MAX_TOKENS},
     )
     content = response.choices[0].message.content if response.choices else None
     if not content:
