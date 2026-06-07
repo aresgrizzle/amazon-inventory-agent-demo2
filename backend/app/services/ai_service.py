@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -15,7 +16,7 @@ from backend.app.core.config import (
 
 AI_NOT_CONFIGURED_MESSAGE = "OpenAI is not configured"
 AI_REQUEST_TIMEOUT_SECONDS = 18.0
-AI_MAX_TOKENS = 1000
+AI_MAX_TOKENS = 1800
 
 
 def is_ai_configured() -> bool:
@@ -48,6 +49,20 @@ def generate_sku_analysis(
 def generate_task_priority(open_tasks: list[dict[str, Any]]) -> str:
     prompt = _build_task_priority_prompt(open_tasks=open_tasks)
     return _call_openai(prompt)
+
+
+def generate_task_insights(
+    open_tasks: list[dict[str, Any]],
+    top_risk_skus: list[dict[str, Any]],
+    risk_distribution: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    prompt = _build_task_insights_prompt(
+        open_tasks=open_tasks,
+        top_risk_skus=top_risk_skus,
+        risk_distribution=risk_distribution,
+    )
+    raw_text = _call_openai(prompt)
+    return _parse_task_insights(raw_text)
 
 
 def _call_openai(prompt: str) -> str:
@@ -181,6 +196,110 @@ def _build_task_priority_prompt(open_tasks: list[dict[str, Any]]) -> str:
         "重要约束：不要重新计算风险，不要编造没有提供的数据；只基于任务列表和系统风险等级排序。\n\n"
         f"系统数据：\n{_to_json(payload)}"
     )
+
+
+def _build_task_insights_prompt(
+    open_tasks: list[dict[str, Any]],
+    top_risk_skus: list[dict[str, Any]],
+    risk_distribution: list[dict[str, Any]],
+) -> str:
+    payload = {
+        "open_tasks": open_tasks,
+        "top_risk_skus": top_risk_skus,
+        "risk_distribution": risk_distribution,
+    }
+    return (
+        "你是一名资深 Amazon 库存运营负责人。请基于系统提供的未完成任务列表、"
+        "高风险 SKU 和风险分布，归纳出 3 到 6 个结构化风险问题卡片。\n\n"
+        "重要约束：\n"
+        "1. 不要重新计算风险，只解释系统已经给出的 task_type、priority、risk_level、suggested_action 和 SKU 风险字段。\n"
+        "2. 不要编造没有提供的 SKU、任务 ID 或库存数据。\n"
+        "3. 输出必须是严格 JSON，不要输出 Markdown，不要使用代码块。\n"
+        "4. related_skus 只能来自输入数据中的 seller_sku。\n"
+        "5. related_task_ids 只能来自输入数据中的 task_id。\n\n"
+        "JSON 格式必须为：\n"
+        "{\n"
+        '  "insights": [\n'
+        "    {\n"
+        '      "id": "critical_stockout",\n'
+        '      "title": "Critical stockout risk",\n'
+        '      "risk_level": "critical",\n'
+        '      "priority": "P0",\n'
+        '      "affected_sku_count": 9,\n'
+        '      "task_count": 18,\n'
+        '      "summary": "9 个 SKU 存在 critical 断货风险，需要优先处理。",\n'
+        '      "recommended_action": "replenish_now",\n'
+        '      "risk_points": ["部分 SKU 已经断货"],\n'
+        '      "solution": ["优先确认供应商交期"],\n'
+        '      "related_skus": ["DEMO-STOCKOUT-01"],\n'
+        '      "related_task_ids": ["task-id"]\n'
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        f"系统数据：\n{_to_json(payload)}"
+    )
+
+
+def _parse_task_insights(raw_text: str) -> list[dict[str, Any]]:
+    data = _parse_json_object(raw_text)
+    insights = data.get("insights")
+    if not isinstance(insights, list):
+        raise ValueError("AI response does not contain an insights list")
+    return [_normalize_insight(insight, index) for index, insight in enumerate(insights)]
+
+
+def _parse_json_object(raw_text: str) -> dict[str, Any]:
+    text = raw_text.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        if not match:
+            raise ValueError("AI response is not valid JSON") from None
+        data = json.loads(match.group(0))
+    if not isinstance(data, dict):
+        raise ValueError("AI response JSON root must be an object")
+    return data
+
+
+def _normalize_insight(insight: Any, index: int) -> dict[str, Any]:
+    if not isinstance(insight, dict):
+        raise ValueError("Each insight must be an object")
+    title = str(insight.get("title") or f"Risk insight {index + 1}")
+    insight_id = str(
+        insight.get("id")
+        or re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")
+        or f"risk_insight_{index + 1}"
+    )
+    return {
+        "id": insight_id,
+        "title": title,
+        "risk_level": str(insight.get("risk_level") or "unknown"),
+        "priority": str(insight.get("priority") or "P3"),
+        "affected_sku_count": _to_int(insight.get("affected_sku_count")),
+        "task_count": _to_int(insight.get("task_count")),
+        "summary": str(insight.get("summary") or ""),
+        "recommended_action": str(insight.get("recommended_action") or "keep_monitoring"),
+        "risk_points": _to_string_list(insight.get("risk_points")),
+        "solution": _to_string_list(insight.get("solution")),
+        "related_skus": _to_string_list(insight.get("related_skus")),
+        "related_task_ids": _to_string_list(insight.get("related_task_ids")),
+    }
+
+
+def _to_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _to_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item is not None and str(item).strip()]
 
 
 def _to_json(value: Any) -> str:

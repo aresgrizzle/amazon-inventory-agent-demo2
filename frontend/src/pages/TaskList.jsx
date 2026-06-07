@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { getTaskAiPriority } from "../api/aiApi.js";
+import { getTaskInsights } from "../api/aiApi.js";
 import { fetchTasks, ignoreTask, resolveTask } from "../api/taskApi.js";
+import InsightCard from "../components/InsightCard.jsx";
 import TaskCard from "../components/TaskCard.jsx";
 
 const taskTypes = [
@@ -14,44 +15,80 @@ const taskTypes = [
 const taskStatuses = ["", "pending", "resolved", "ignored"];
 const priorities = ["", "P0", "P1", "P2", "P3"];
 
-function TaskAiPanel({ data, loading, error }) {
+function RiskInsightCenter({ data, loading, error, tasks, onSelectInsight }) {
+  const insights = data?.insights || [];
+
+  function enrichInsight(insight) {
+    const taskIds = new Set(insight.related_task_ids || []);
+    const skus = new Set(insight.related_skus || []);
+    const relatedTasks = tasks.filter(
+      (task) => taskIds.has(task.task_id) || skus.has(task.seller_sku)
+    );
+    return { ...insight, related_tasks: relatedTasks };
+  }
+
   return (
-    <section className="ai-panel">
-      <div className="ai-panel-header">
-        <h2>AI Priority Suggestion</h2>
+    <section className="risk-center">
+      <div className="section-header">
+        <div>
+          <h2>Risk Insight Center</h2>
+          <p>AI 将未完成任务归纳为可追踪的问题卡片</p>
+        </div>
         {data?.generated_at && <span>{new Date(data.generated_at).toLocaleString()}</span>}
       </div>
-      {loading && <div className="state-line">Loading AI priority suggestion...</div>}
+
+      {loading && <div className="state-line">Loading risk insights...</div>}
       {!loading && error && <div className="error-line">{error}</div>}
       {!loading && !error && data?.configured === false && (
-        <div className="state-line">AI priority suggestion is not configured.</div>
+        <div className="state-line">AI risk insights are not configured.</div>
       )}
       {!loading && !error && data?.error && <div className="error-line">{data.error}</div>}
-      {!loading && !error && data?.suggestion && <p className="ai-content">{data.suggestion}</p>}
+      {!loading && !error && data?.configured !== false && insights.length === 0 && !data?.error && (
+        <div className="empty-state">暂无风险问题卡片</div>
+      )}
+      {!loading && !error && insights.length > 0 && (
+        <div className="insight-grid">
+          {insights.map((insight) => {
+            const enrichedInsight = enrichInsight(insight);
+            return (
+              <InsightCard
+                key={insight.id}
+                insight={enrichedInsight}
+                onClick={() => onSelectInsight(enrichedInsight)}
+              />
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
 
-function TaskList({ reloadKey, onTaskUpdated }) {
+function TaskList({ reloadKey, onTaskUpdated, onSelectInsight }) {
   const [tasks, setTasks] = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
   const [filters, setFilters] = useState({
     task_type: "",
     task_status: "",
     priority: "",
     seller_sku: "",
   });
-  const [aiPriority, setAiPriority] = useState(null);
+  const [insightData, setInsightData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [aiLoading, setAiLoading] = useState(true);
+  const [insightLoading, setInsightLoading] = useState(true);
   const [busyTaskId, setBusyTaskId] = useState("");
   const [error, setError] = useState("");
-  const [aiError, setAiError] = useState("");
+  const [insightError, setInsightError] = useState("");
 
   async function loadTasks(nextFilters = filters) {
     setLoading(true);
     setError("");
     try {
-      setTasks(await fetchTasks(nextFilters));
+      const nextTasks = await fetchTasks(nextFilters);
+      setTasks(nextTasks);
+      if (Object.values(nextFilters).every((value) => value === "")) {
+        setAllTasks(nextTasks);
+      }
     } catch (err) {
       setError(err.message || "Task data failed to load");
     } finally {
@@ -59,21 +96,26 @@ function TaskList({ reloadKey, onTaskUpdated }) {
     }
   }
 
-  async function loadAiPriority() {
-    setAiLoading(true);
-    setAiError("");
+  async function loadAllTasks() {
+    setAllTasks(await fetchTasks({}));
+  }
+
+  async function loadInsights() {
+    setInsightLoading(true);
+    setInsightError("");
     try {
-      setAiPriority(await getTaskAiPriority());
+      setInsightData(await getTaskInsights());
     } catch (err) {
-      setAiError(err.message || "AI priority suggestion failed to load");
+      setInsightError(err.message || "Risk insights failed to load");
     } finally {
-      setAiLoading(false);
+      setInsightLoading(false);
     }
   }
 
   useEffect(() => {
     loadTasks();
-    loadAiPriority();
+    loadAllTasks();
+    loadInsights();
   }, [reloadKey]);
 
   function updateFilter(name, value) {
@@ -92,7 +134,8 @@ function TaskList({ reloadKey, onTaskUpdated }) {
         await ignoreTask(taskId);
       }
       await loadTasks();
-      await loadAiPriority();
+      await loadAllTasks();
+      await loadInsights();
       onTaskUpdated();
     } catch (err) {
       setError(err.message || "Task status update failed");
@@ -109,6 +152,21 @@ function TaskList({ reloadKey, onTaskUpdated }) {
           <p>库存 Agent 生成的运营待办</p>
         </div>
         <div className="record-count">{tasks.length} tasks</div>
+      </div>
+
+      <RiskInsightCenter
+        data={insightData}
+        loading={insightLoading}
+        error={insightError}
+        tasks={allTasks.length ? allTasks : tasks}
+        onSelectInsight={onSelectInsight}
+      />
+
+      <div className="section-header task-section-header">
+        <div>
+          <h2>Task List</h2>
+          <p>按任务类型、状态、优先级和 SKU 筛选原始任务</p>
+        </div>
       </div>
 
       <div className="filter-bar">
@@ -133,8 +191,6 @@ function TaskList({ reloadKey, onTaskUpdated }) {
           ))}
         </select>
       </div>
-
-      <TaskAiPanel data={aiPriority} loading={aiLoading} error={aiError} />
 
       {loading && <div className="state-line">Loading...</div>}
       {error && <div className="error-line">{error}</div>}

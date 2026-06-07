@@ -1,6 +1,6 @@
 import RiskBadge from "./RiskBadge.jsx";
 
-function TaskCard({ task, onResolve, onIgnore, busy }) {
+function TaskCard({ task, onResolve, onIgnore, busy, readOnly = false }) {
   const isDone = task.task_status === "resolved" || task.task_status === "ignored";
 
   return (
@@ -25,14 +25,16 @@ function TaskCard({ task, onResolve, onIgnore, busy }) {
           <span>{new Date(task.created_at).toLocaleString()}</span>
         </div>
       </div>
-      <div className="task-actions">
-        <button type="button" disabled={busy || isDone} onClick={() => onResolve(task.task_id)}>
-          标记已解决
-        </button>
-        <button type="button" disabled={busy || isDone} onClick={() => onIgnore(task.task_id)}>
-          忽略任务
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="task-actions">
+          <button type="button" disabled={busy || isDone} onClick={() => onResolve(task.task_id)}>
+            标记已解决
+          </button>
+          <button type="button" disabled={busy || isDone} onClick={() => onIgnore(task.task_id)}>
+            忽略任务
+          </button>
+        </div>
+      )}
     </article>
   );
 }

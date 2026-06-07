@@ -18,3 +18,8 @@ export async function getTaskAiPriority() {
   const response = await api.get("/api/ai/task-priority");
   return response.data;
 }
+
+export async function getTaskInsights() {
+  const response = await api.get("/api/ai/task-insights");
+  return response.data;
+}
