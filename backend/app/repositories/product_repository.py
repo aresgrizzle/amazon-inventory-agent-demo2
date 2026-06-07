@@ -10,14 +10,7 @@ def get_all_products() -> pd.DataFrame:
     query = text(
         """
         SELECT
-            id,
-            seller_id,
-            marketplace_id,
-            marketplace_name,
-            seller_sku,
-            asin,
-            fn_sku,
-            product_name
+            *
         FROM amazon_product_master
         WHERE is_deleted = 0
         ORDER BY seller_sku

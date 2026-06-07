@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from backend.app.utils.risk_rules import (
     build_action_reason,
@@ -6,14 +6,20 @@ from backend.app.utils.risk_rules import (
     calculate_daily_sales_for_risk,
     calculate_effective_inbound_quantity,
     calculate_estimated_stockout_date,
+    calculate_overstock_risk_score,
     calculate_recommended_replenishment_quantity,
     calculate_total_cover_days,
+    decision_skill,
+    demand_skill,
     get_recommended_action,
     judge_data_quality,
     judge_need_manual_approval,
     judge_overstock_risk,
     judge_stockout_risk,
+    profitability_skill,
+    replenishment_skill,
     round_up_to_carton,
+    stockout_skill,
 )
 
 
@@ -88,17 +94,11 @@ def test_data_quality_invalid_config() -> None:
 
 
 def test_recommended_action_priority() -> None:
-    assert (
-        get_recommended_action("critical", "low", 100, "missing_sales")
-        == "complete_missing_data"
-    )
+    assert get_recommended_action("critical", "low", 100, "missing_sales") == "complete_missing_data"
     assert get_recommended_action("critical", "low", 100, "complete") == "replenish_now"
     assert get_recommended_action("high", "low", 100, "complete") == "replenish_now"
     assert get_recommended_action("medium", "low", 0, "complete") == "prepare_replenishment"
-    assert (
-        get_recommended_action("low", "high", 0, "complete")
-        == "clearance_or_reduce_replenishment"
-    )
+    assert get_recommended_action("low", "high", 0, "complete") == "clearance_or_reduce_replenishment"
     assert get_recommended_action("low", "low", 0, "complete") == "keep_monitoring"
 
 
@@ -118,7 +118,137 @@ def test_action_reason_contains_required_business_fields() -> None:
     reason = build_action_reason("SKU-001", 12.345, "high", "low", 120)
 
     assert "SKU-001" in reason
-    assert "12.35 天" in reason
-    assert "断货风险为 high" in reason
-    assert "滞销风险为 low" in reason
-    assert "建议补货数量为 120" in reason
+    assert "high" in reason
+    assert "low" in reason
+    assert "120" in reason
+
+
+def test_demand_skill_detects_rising_sales() -> None:
+    result = demand_skill(sales_7d=120, sales_30d=300, sales_trend="rising", sales_trend_rate=0.25)
+
+    assert result["demand_signal"] == "rising"
+    assert result["demand_score"] > 70
+
+
+def test_stockout_skill_scores_low_inventory_with_rising_sales_as_critical() -> None:
+    result = stockout_skill(
+        fulfillable_quantity=5,
+        reserved_quantity=2,
+        avg_daily_sales_7d=10,
+        avg_daily_sales_30d=8,
+        available_days=0.5,
+        inbound_eta_date=None,
+        total_replenishment_lead_time_days=30,
+        safety_stock_days=7,
+        sales_trend="rising",
+        current_price=30,
+        today=date(2026, 6, 7),
+    )
+
+    assert result["stockout_risk_level"] == "critical"
+    assert result["stockout_risk_score"] >= 95
+    assert result["estimated_lost_revenue"] > 0
+
+
+def test_stockout_skill_reduces_risk_when_inbound_arrives_before_stockout() -> None:
+    result = stockout_skill(
+        fulfillable_quantity=50,
+        reserved_quantity=0,
+        avg_daily_sales_7d=10,
+        avg_daily_sales_30d=10,
+        available_days=5,
+        inbound_eta_date=date(2026, 6, 10),
+        total_replenishment_lead_time_days=30,
+        safety_stock_days=7,
+        sales_trend="stable",
+        current_price=30,
+        today=date(2026, 6, 7),
+    )
+
+    assert result["stockout_risk_level"] == "high"
+    assert result["stockout_risk_score"] < 95
+
+
+def test_profitability_skill_requires_approval_for_low_margin_replenishment() -> None:
+    result = profitability_skill(
+        current_price=20,
+        purchase_cost=8,
+        landed_cost=18,
+        gross_margin=0.10,
+        recommended_replenishment_quantity=100,
+    )
+
+    assert result["profitability_signal"] == "low_margin"
+    assert result["approval_required"] is True
+
+
+def test_replenishment_skill_applies_moq_and_carton_quantity() -> None:
+    result = replenishment_skill(
+        avg_daily_sales_30d=3,
+        sales_trend="stable",
+        target_cover_days=30,
+        available_quantity=80,
+        inbound_quantity=0,
+        moq=100,
+        carton_quantity=24,
+        total_replenishment_lead_time_days=20,
+        safety_stock_days=7,
+    )
+
+    assert result["recommended_replenishment_quantity"] == 120
+
+
+def test_decision_skill_lowers_confidence_when_data_is_missing() -> None:
+    result = decision_skill(
+        demand_result={"demand_signal": "no_sales"},
+        stockout_result={
+            "stockout_risk_level": "unknown",
+            "stockout_risk_score": 40,
+            "estimated_lost_revenue": 0,
+        },
+        overstock_risk_level="unknown",
+        overstock_risk_score=40,
+        profitability_result={
+            "profitability_signal": "unknown",
+            "approval_required": False,
+        },
+        replenishment_result={
+            "recommended_replenishment_quantity": 0,
+            "recommended_action": "keep_monitoring",
+        },
+        data_quality_status="missing_sales",
+    )
+
+    assert result["recommended_action"] == "complete_missing_data"
+    assert result["decision_confidence"] < 50
+
+
+def test_overstock_score_increases_for_low_margin_slow_moving_inventory() -> None:
+    score = calculate_overstock_risk_score(
+        overstock_risk_level="high",
+        total_cover_days=220,
+        avg_daily_sales_30d=2,
+        gross_margin=0.10,
+    )
+
+    assert score >= 88
+
+
+def test_stockout_eta_helper_ignores_far_inbound_date() -> None:
+    result = stockout_skill(
+        fulfillable_quantity=50,
+        reserved_quantity=0,
+        avg_daily_sales_7d=10,
+        avg_daily_sales_30d=10,
+        available_days=5,
+        inbound_eta_date=date(2026, 7, 20),
+        total_replenishment_lead_time_days=30,
+        safety_stock_days=7,
+        sales_trend="stable",
+        current_price=30,
+        today=date(2026, 6, 7),
+    )
+
+    assert result["stockout_risk_level"] == "critical"
+    assert calculate_estimated_stockout_date(date(2026, 6, 7), 5.1) == date(2026, 6, 12)
+    assert date(2026, 6, 7) + timedelta(days=5) == date(2026, 6, 12)

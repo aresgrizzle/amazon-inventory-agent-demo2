@@ -3,26 +3,70 @@ import { getSkuAiAnalysis } from "../api/aiApi.js";
 import { fetchSkuAnalysis } from "../api/inventoryApi.js";
 import RiskBadge from "../components/RiskBadge.jsx";
 
-const fields = [
+const baseFields = [
   ["SKU", "seller_sku"],
   ["ASIN", "asin"],
-  ["可售库存", "fulfillable_quantity"],
-  ["总库存", "total_quantity"],
-  ["有效在途库存", "effective_inbound_quantity"],
-  ["近 7 日日均销量", "avg_daily_sales_7d"],
-  ["近 30 日日均销量", "avg_daily_sales_30d"],
-  ["可售天数", "available_days"],
-  ["总库存覆盖天数", "total_cover_days"],
-  ["预计断货日期", "estimated_stockout_date"],
-  ["建议补货数量", "recommended_replenishment_quantity"],
-  ["建议动作", "recommended_action"],
-  ["数据质量状态", "data_quality_status"],
+  ["Available Inventory", "fulfillable_quantity"],
+  ["Total Inventory", "total_quantity"],
+  ["Effective Inbound", "effective_inbound_quantity"],
+  ["7D Avg Sales", "avg_daily_sales_7d"],
+  ["30D Avg Sales", "avg_daily_sales_30d"],
+  ["Available Days", "available_days"],
+  ["Total Cover Days", "total_cover_days"],
+  ["Estimated Stockout Date", "estimated_stockout_date"],
+  ["Recommended Qty", "recommended_replenishment_quantity"],
+  ["Recommended Action", "recommended_action"],
+  ["Data Quality", "data_quality_status"],
 ];
 
+function formatEmpty(value) {
+  return value === null || value === undefined || value === "" ? "-" : value;
+}
+
 function formatValue(value) {
-  if (value === null || value === undefined) return "-";
+  if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "number" && !Number.isInteger(value)) return value.toFixed(2);
   return value;
+}
+
+function formatCurrency(value) {
+  if (value === null || value === undefined || value === "") return "$0.00";
+  const number = Number(value);
+  if (Number.isNaN(number)) return "$0.00";
+  return `$${number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || value === "") return "N/A";
+  const number = Number(value);
+  if (Number.isNaN(number)) return "N/A";
+  const percent = Math.abs(number) <= 1 ? number * 100 : number;
+  return `${percent.toFixed(1)}%`;
+}
+
+function formatScore(value) {
+  if (value === null || value === undefined || value === "") return "0.0";
+  const number = Number(value);
+  if (Number.isNaN(number)) return "0.0";
+  return number.toFixed(1);
+}
+
+function DetailItem({ label, children }) {
+  return (
+    <div className="detail-item">
+      <span>{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function IntelligenceSection({ title, children }) {
+  return (
+    <section className="intelligence-card">
+      <h2>{title}</h2>
+      {children}
+    </section>
+  );
 }
 
 function SkuAiPanel({ data, loading, error }) {
@@ -87,39 +131,70 @@ function SkuDetail({ sellerSku, onBack }) {
           <h1>SKU Detail</h1>
           <p>{sellerSku}</p>
         </div>
-        <button className="secondary-button" type="button" onClick={onBack}>返回 Inventory</button>
+        <button className="secondary-button" type="button" onClick={onBack}>Back to Inventory</button>
       </div>
 
       {loading && <div className="state-line">Loading...</div>}
       {error && <div className="error-line">{error}</div>}
-      {!loading && !error && !detail && <div className="empty-state">暂无数据</div>}
+      {!loading && !error && !detail && <div className="empty-state">No data</div>}
 
       {!loading && detail && (
         <div className="detail-layout">
           <div className="detail-grid">
-            {fields.map(([label, key]) => (
-              <div className="detail-item" key={key}>
-                <span>{label}</span>
+            {baseFields.map(([label, key]) => (
+              <DetailItem label={label} key={key}>
                 {["recommended_action", "data_quality_status"].includes(key) ? (
                   <RiskBadge value={detail[key]} />
                 ) : (
                   <strong>{formatValue(detail[key])}</strong>
                 )}
-              </div>
+              </DetailItem>
             ))}
-            <div className="detail-item">
-              <span>断货风险</span>
+            <DetailItem label="Stockout Risk">
               <RiskBadge value={detail.stockout_risk_level} />
-            </div>
-            <div className="detail-item">
-              <span>滞销风险</span>
+            </DetailItem>
+            <DetailItem label="Overstock Risk">
               <RiskBadge value={detail.overstock_risk_level} />
-            </div>
+            </DetailItem>
           </div>
+
+          <div className="intelligence-grid">
+            <IntelligenceSection title="Profitability">
+              <div className="mini-metric-grid">
+                <DetailItem label="Current Price"><strong>{formatCurrency(detail.current_price)}</strong></DetailItem>
+                <DetailItem label="Landed Cost"><strong>{formatCurrency(detail.landed_cost)}</strong></DetailItem>
+                <DetailItem label="Gross Margin"><strong>{formatPercent(detail.gross_margin)}</strong></DetailItem>
+              </div>
+            </IntelligenceSection>
+
+            <IntelligenceSection title="Replenishment Policy">
+              <div className="mini-metric-grid">
+                <DetailItem label="Lead Time"><strong>{formatEmpty(detail.total_replenishment_lead_time_days)} days</strong></DetailItem>
+                <DetailItem label="Target Cover"><strong>{formatEmpty(detail.target_cover_days)} days</strong></DetailItem>
+                <DetailItem label="Safety Stock"><strong>{formatEmpty(detail.safety_stock_days)} days</strong></DetailItem>
+                <DetailItem label="MOQ"><strong>{formatEmpty(detail.moq)}</strong></DetailItem>
+              </div>
+            </IntelligenceSection>
+
+            <IntelligenceSection title="Decision Intelligence">
+              <div className="mini-metric-grid">
+                <DetailItem label="Stockout Score"><strong>{formatScore(detail.stockout_risk_score)}</strong></DetailItem>
+                <DetailItem label="Overstock Score"><strong>{formatScore(detail.overstock_risk_score)}</strong></DetailItem>
+                <DetailItem label="Lost Revenue"><strong>{formatCurrency(detail.estimated_lost_revenue)}</strong></DetailItem>
+                <DetailItem label="Confidence"><strong>{formatPercent(detail.decision_confidence)}</strong></DetailItem>
+              </div>
+              <div className="decision-explanation">
+                <span>Decision Explanation</span>
+                <p>{detail.decision_explanation || detail.action_reason || "No decision explanation available."}</p>
+              </div>
+            </IntelligenceSection>
+          </div>
+
           <section className="reason-panel">
-            <h2>建议原因</h2>
-            <p>{detail.action_reason || "暂无建议原因"}</p>
+            <h2>Recommendation Reason</h2>
+            <p>{detail.action_reason || "No recommendation reason available."}</p>
           </section>
+
           <SkuAiPanel data={aiAnalysis} loading={aiLoading} error={aiError} />
         </div>
       )}

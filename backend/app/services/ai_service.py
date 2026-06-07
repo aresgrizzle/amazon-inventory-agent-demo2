@@ -162,6 +162,23 @@ def _build_dashboard_summary_prompt(
         "risk_distribution": risk_distribution,
         "top_risk_skus": top_risk_skus,
         "open_tasks": open_tasks,
+        "skill_output_fields": [
+            "estimated_lost_revenue_total",
+            "high_impact_task_count",
+            "avg_decision_confidence",
+            "stockout_risk_score_avg",
+            "overstock_risk_score_avg",
+            "stockout_risk_score",
+            "overstock_risk_score",
+            "estimated_lost_revenue",
+            "decision_confidence",
+        ],
+        "ai_constraints": [
+            "Do not recalculate risk scores.",
+            "Do not recalculate replenishment quantity.",
+            "Do not recalculate approval level or task priority.",
+            "Only explain the existing rule Skill outputs.",
+        ],
     }
     return (
         "你是一名资深 Amazon 库存运营负责人。请根据系统提供的 SKU 总数、风险分布、"
@@ -179,6 +196,21 @@ def _build_sku_analysis_prompt(
     payload = {
         "sku_detail": sku_detail,
         "sku_tasks": sku_tasks,
+        "skill_output_fields": [
+            "gross_margin",
+            "sales_trend",
+            "stockout_risk_score",
+            "overstock_risk_score",
+            "estimated_lost_revenue",
+            "decision_confidence",
+            "decision_explanation",
+        ],
+        "ai_constraints": [
+            "Do not recalculate risk scores.",
+            "Do not change the recommended action.",
+            "Do not change approval decisions.",
+            "Only explain the evidence already provided by the rule Skill outputs.",
+        ],
     }
     return (
         "你是一名资深 Amazon 库存运营。请根据该 SKU 的库存、销量、风险等级、系统任务建议，"
@@ -210,6 +242,22 @@ def _build_task_insights_prompt(
         "open_tasks": open_tasks,
         "top_risk_skus": top_risk_skus,
         "risk_distribution": risk_distribution,
+        "skill_output_fields": [
+            "problem_type",
+            "impact_level",
+            "estimated_impact_value",
+            "approval_level",
+            "stockout_risk_score",
+            "overstock_risk_score",
+            "estimated_lost_revenue",
+            "decision_confidence",
+        ],
+        "ai_constraints": [
+            "Do not recalculate task priority.",
+            "Do not recalculate approval level.",
+            "Do not invent new task ids or SKUs.",
+            "Only group and explain the existing task and Skill outputs.",
+        ],
     }
     return (
         "你是一名资深 Amazon 库存运营负责人。请基于系统提供的未完成任务列表、"

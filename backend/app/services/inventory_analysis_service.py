@@ -16,13 +16,16 @@ from backend.app.utils.risk_rules import (
     calculate_daily_sales_for_risk,
     calculate_effective_inbound_quantity,
     calculate_estimated_stockout_date,
-    calculate_recommended_replenishment_quantity,
+    calculate_overstock_risk_score,
     calculate_total_cover_days,
-    get_recommended_action,
+    decision_skill,
+    demand_skill,
     judge_data_quality,
     judge_need_manual_approval,
     judge_overstock_risk,
-    judge_stockout_risk,
+    profitability_skill,
+    replenishment_skill,
+    stockout_skill,
 )
 
 
@@ -64,6 +67,14 @@ def _optional_date(value: Any) -> Optional[date]:
     if hasattr(value, "date"):
         return value.date()
     return value
+
+
+def _first_present(row: Optional[pd.Series], columns: list[str], default: Any = None) -> Any:
+    for column in columns:
+        value = _value(row, column)
+        if not _is_missing(value):
+            return value
+    return default
 
 
 def _index_by_sku(df: pd.DataFrame) -> dict[tuple[str, str, str], pd.Series]:
@@ -132,12 +143,25 @@ def analyze_all_skus(
         inbound_shipped_quantity = _int_value(inventory, "inbound_shipped_quantity")
         inbound_receiving_quantity = _int_value(inventory, "inbound_receiving_quantity")
         total_unfulfillable_quantity = _int_value(inventory, "total_unfulfillable_quantity")
+        total_reserved_quantity = _int_value(inventory, "total_reserved_quantity")
+        current_price = _float_value(product, "current_price")
+        purchase_cost = _float_value(product, "purchase_cost")
+        landed_cost = _float_value(product, "landed_cost")
+        gross_margin = _float_value(product, "gross_margin")
+        sales_7d = int(_first_present(sales, ["sales_7d", "sales_units_7d"], 0))
+        sales_30d = int(_first_present(sales, ["sales_30d", "sales_units_30d"], 0))
+        sales_trend = str(_first_present(sales, ["sales_trend"], "stable") or "stable")
+        sales_trend_rate = _float_value(sales, "sales_trend_rate")
         avg_daily_sales_7d = _float_value(sales, "avg_daily_sales_7d")
         avg_daily_sales_30d = _float_value(sales, "avg_daily_sales_30d")
         safety_stock_days = _int_value(config, "safety_stock_days")
-        target_stock_days = _int_value(config, "target_stock_days")
-        total_replenishment_days = _value(config, "total_replenishment_days")
+        target_cover_days = _first_present(config, ["target_cover_days", "target_stock_days"], 45)
+        total_replenishment_days = _first_present(
+            config,
+            ["total_replenishment_lead_time_days", "total_replenishment_days"],
+        )
         carton_quantity = _value(config, "carton_quantity")
+        moq = _value(config, "moq")
 
         data_quality_status = judge_data_quality(
             has_inventory=has_inventory,
@@ -163,31 +187,70 @@ def analyze_all_skus(
             analysis_date,
             available_days,
         )
-        stockout_risk_level = judge_stockout_risk(
-            fulfillable_quantity,
-            available_days,
-            safety_stock_days,
-            total_replenishment_days,
-        )
         overstock_risk_level = judge_overstock_risk(
             total_quantity,
             avg_daily_sales_30d,
             total_cover_days,
         )
-        recommended_replenishment_quantity = calculate_recommended_replenishment_quantity(
-            target_stock_days,
-            avg_daily_sales_30d,
-            fulfillable_quantity,
-            effective_inbound_quantity,
-            carton_quantity,
-        )
-        recommended_action = get_recommended_action(
-            stockout_risk_level,
+        overstock_risk_score = calculate_overstock_risk_score(
             overstock_risk_level,
-            recommended_replenishment_quantity,
-            data_quality_status,
+            total_cover_days,
+            avg_daily_sales_30d,
+            gross_margin,
         )
-        need_manual_approval = judge_need_manual_approval(
+
+        demand_result = demand_skill(
+            sales_7d=sales_7d,
+            sales_30d=sales_30d,
+            sales_trend=sales_trend,
+            sales_trend_rate=sales_trend_rate,
+        )
+        stockout_result = stockout_skill(
+            fulfillable_quantity=fulfillable_quantity,
+            reserved_quantity=total_reserved_quantity,
+            avg_daily_sales_7d=avg_daily_sales_7d,
+            avg_daily_sales_30d=avg_daily_sales_30d,
+            available_days=available_days,
+            inbound_eta_date=None,
+            total_replenishment_lead_time_days=total_replenishment_days,
+            safety_stock_days=safety_stock_days,
+            sales_trend=sales_trend,
+            current_price=current_price,
+            today=analysis_date,
+        )
+        stockout_risk_level = stockout_result["stockout_risk_level"]
+        replenishment_result = replenishment_skill(
+            avg_daily_sales_30d=avg_daily_sales_30d,
+            sales_trend=sales_trend,
+            target_cover_days=target_cover_days,
+            available_quantity=fulfillable_quantity,
+            inbound_quantity=effective_inbound_quantity,
+            moq=moq,
+            carton_quantity=carton_quantity,
+            total_replenishment_lead_time_days=total_replenishment_days,
+            safety_stock_days=safety_stock_days,
+        )
+        recommended_replenishment_quantity = replenishment_result[
+            "recommended_replenishment_quantity"
+        ]
+        profitability_result = profitability_skill(
+            current_price=current_price,
+            purchase_cost=purchase_cost,
+            landed_cost=landed_cost,
+            gross_margin=gross_margin,
+            recommended_replenishment_quantity=recommended_replenishment_quantity,
+        )
+        decision_result = decision_skill(
+            demand_result=demand_result,
+            stockout_result=stockout_result,
+            overstock_risk_level=overstock_risk_level,
+            overstock_risk_score=overstock_risk_score,
+            profitability_result=profitability_result,
+            replenishment_result=replenishment_result,
+            data_quality_status=data_quality_status,
+        )
+        recommended_action = decision_result["recommended_action"]
+        need_manual_approval = bool(decision_result["approval_required"]) or judge_need_manual_approval(
             recommended_action,
             recommended_replenishment_quantity,
         )
@@ -197,6 +260,10 @@ def analyze_all_skus(
             stockout_risk_level,
             overstock_risk_level,
             recommended_replenishment_quantity,
+        )
+        decision_explanation = (
+            f"{action_reason} {decision_result['decision_explanation']} "
+            f"{profitability_result['explanation']} {replenishment_result['explanation']}"
         )
 
         row = {
@@ -229,11 +296,19 @@ def analyze_all_skus(
             "recommended_replenishment_date": None,
             "recommended_action": recommended_action,
             "action_reason": action_reason,
-            "risk_reason": action_reason,
+            "risk_reason": decision_explanation,
             "need_manual_approval": need_manual_approval,
             "confidence_score": _confidence_score(data_quality_status, avg_daily_sales_7d),
             "data_quality_status": data_quality_status,
             "total_unfulfillable_quantity": total_unfulfillable_quantity,
+            "current_price": current_price,
+            "purchase_cost": purchase_cost,
+            "landed_cost": landed_cost,
+            "gross_margin": gross_margin,
+            "stockout_risk_score": stockout_result["stockout_risk_score"],
+            "overstock_risk_score": overstock_risk_score,
+            "estimated_lost_revenue": stockout_result["estimated_lost_revenue"],
+            "decision_confidence": decision_result["decision_confidence"],
         }
         row["id"] = analysis_repository.insert_analysis(row)
         results.append(row)

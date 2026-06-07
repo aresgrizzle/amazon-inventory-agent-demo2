@@ -20,13 +20,64 @@ def _priority(risk_level: str) -> str:
     return PRIORITY_MAP.get(risk_level, "P2")
 
 
+def _impact_level(value: float) -> str:
+    if value >= 5000:
+        return "high"
+    if value >= 1000:
+        return "medium"
+    if value > 0:
+        return "low"
+    return "none"
+
+
+def _priority_with_impact(risk_level: str, impact_value: float) -> str:
+    if risk_level == "critical":
+        return "P0"
+    if risk_level == "high" and impact_value >= 3000:
+        return "P0"
+    if impact_value >= 5000:
+        return "P1"
+    return _priority(risk_level)
+
+
+def _approval_level(analysis: dict[str, Any], impact_value: float) -> str:
+    if not analysis.get("need_manual_approval"):
+        return "none"
+    if impact_value >= 5000:
+        return "manager"
+    return "operator"
+
+
+def _estimated_overstock_value(analysis: dict[str, Any]) -> float:
+    landed_cost = float(analysis.get("landed_cost") or 0)
+    if landed_cost <= 0:
+        landed_cost = 10.0
+    return round(float(analysis.get("total_quantity") or 0) * landed_cost, 2)
+
+
 def _base_task(
     analysis: dict[str, Any],
     task_type: str,
     task_title: str,
     task_description: str,
     risk_level: str,
+    problem_type: str,
+    estimated_impact_value: float = 0.0,
 ) -> dict[str, Any]:
+    action_payload = {
+        "seller_sku": analysis["seller_sku"],
+        "recommended_quantity": analysis["recommended_replenishment_quantity"],
+        "recommended_action": analysis["recommended_action"],
+        "estimated_impact_value": round(float(estimated_impact_value or 0), 2),
+        "estimated_lost_revenue": analysis.get("estimated_lost_revenue", 0),
+        "decision_confidence": analysis.get("decision_confidence"),
+        "approval_required": bool(analysis.get("need_manual_approval")),
+        "estimated_stockout_date": str(analysis["estimated_stockout_date"])
+        if analysis.get("estimated_stockout_date") is not None
+        else None,
+    }
+
+    impact_value = float(estimated_impact_value or 0)
     return {
         "task_id": str(uuid4()),
         "analysis_id": analysis["id"],
@@ -37,28 +88,21 @@ def _base_task(
         "task_type": task_type,
         "task_title": task_title,
         "task_description": task_description,
-        "priority": _priority(risk_level),
+        "priority": _priority_with_impact(risk_level, impact_value),
         "risk_level": risk_level,
         "suggested_action": analysis["recommended_action"],
-        "action_parameters": json.dumps(
-            {
-                "recommended_replenishment_quantity": analysis[
-                    "recommended_replenishment_quantity"
-                ],
-                "recommended_action": analysis["recommended_action"],
-                "estimated_stockout_date": str(analysis["estimated_stockout_date"])
-                if analysis.get("estimated_stockout_date") is not None
-                else None,
-            },
-            ensure_ascii=False,
-        ),
-        "expected_impact": analysis["action_reason"],
+        "action_parameters": json.dumps(action_payload, ensure_ascii=False),
+        "expected_impact": analysis.get("risk_reason") or analysis.get("action_reason"),
         "approval_required": analysis["need_manual_approval"],
         "task_status": "pending",
         "assigned_to": None,
         "operator_id": None,
         "operator_note": None,
         "resolved_at": None,
+        "problem_type": problem_type,
+        "impact_level": _impact_level(impact_value),
+        "estimated_impact_value": round(impact_value, 2),
+        "approval_level": _approval_level(analysis, impact_value),
     }
 
 
@@ -68,15 +112,18 @@ def _tasks_for_analysis(analysis: dict[str, Any]) -> list[dict[str, Any]]:
     stockout_risk = analysis["stockout_risk_level"]
     overstock_risk = analysis["overstock_risk_level"]
     recommended_quantity = analysis["recommended_replenishment_quantity"]
+    estimated_lost_revenue = float(analysis.get("estimated_lost_revenue") or 0)
 
     if stockout_risk in {"critical", "high"}:
         tasks.append(
             _base_task(
-                analysis,
-                "stockout_warning",
-                f"[断货预警] {seller_sku} 存在 {stockout_risk} 断货风险",
-                analysis["action_reason"],
-                stockout_risk,
+                analysis=analysis,
+                task_type="stockout_warning",
+                task_title=f"[Stockout warning] {seller_sku} has {stockout_risk} stockout risk",
+                task_description=analysis["action_reason"],
+                risk_level=stockout_risk,
+                problem_type="stockout",
+                estimated_impact_value=estimated_lost_revenue,
             )
         )
 
@@ -84,33 +131,42 @@ def _tasks_for_analysis(analysis: dict[str, Any]) -> list[dict[str, Any]]:
         risk_level = stockout_risk if stockout_risk in PRIORITY_MAP else "medium"
         tasks.append(
             _base_task(
-                analysis,
-                "replenishment_suggestion",
-                f"[补货建议] {seller_sku} 建议补货 {recommended_quantity} 件",
-                analysis["action_reason"],
-                risk_level,
+                analysis=analysis,
+                task_type="replenishment_suggestion",
+                task_title=f"[Replenishment suggestion] {seller_sku} replenish {recommended_quantity} units",
+                task_description=analysis["action_reason"],
+                risk_level=risk_level,
+                problem_type="replenishment",
+                estimated_impact_value=estimated_lost_revenue,
             )
         )
 
     if overstock_risk == "high":
         tasks.append(
             _base_task(
-                analysis,
-                "overstock_warning",
-                f"[滞销预警] {seller_sku} 库存覆盖天数过高",
-                analysis["action_reason"],
-                "high",
+                analysis=analysis,
+                task_type="overstock_warning",
+                task_title=f"[Overstock warning] {seller_sku} has excessive inventory cover",
+                task_description=analysis["action_reason"],
+                risk_level="high",
+                problem_type="overstock",
+                estimated_impact_value=_estimated_overstock_value(analysis),
             )
         )
 
     if analysis.get("total_unfulfillable_quantity", 0) > 0:
         tasks.append(
             _base_task(
-                analysis,
-                "unfulfillable_inventory_alert",
-                f"[不可售库存] {seller_sku} 存在不可售库存",
-                f"{seller_sku} 当前不可售库存为 {analysis['total_unfulfillable_quantity']} 件。",
-                "medium",
+                analysis=analysis,
+                task_type="unfulfillable_inventory_alert",
+                task_title=f"[Unfulfillable inventory] {seller_sku} has unfulfillable inventory",
+                task_description=(
+                    f"{seller_sku} currently has "
+                    f"{analysis['total_unfulfillable_quantity']} unfulfillable units."
+                ),
+                risk_level="medium",
+                problem_type="inventory_exception",
+                estimated_impact_value=0.0,
             )
         )
 
@@ -118,11 +174,16 @@ def _tasks_for_analysis(analysis: dict[str, Any]) -> list[dict[str, Any]]:
         risk_level = "high" if analysis["data_quality_status"] == "missing_inventory" else "medium"
         tasks.append(
             _base_task(
-                analysis,
-                "data_missing_alert",
-                f"[数据缺失] {seller_sku} 数据质量状态为 {analysis['data_quality_status']}",
-                f"{seller_sku} 当前数据质量状态为 {analysis['data_quality_status']}，请先补全数据。",
-                risk_level,
+                analysis=analysis,
+                task_type="data_missing_alert",
+                task_title=f"[Data quality] {seller_sku} data quality is {analysis['data_quality_status']}",
+                task_description=(
+                    f"{seller_sku} data quality is {analysis['data_quality_status']}; "
+                    "complete the missing data before relying on the recommendation."
+                ),
+                risk_level=risk_level,
+                problem_type="data_quality",
+                estimated_impact_value=0.0,
             )
         )
 

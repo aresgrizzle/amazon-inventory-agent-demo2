@@ -16,20 +16,52 @@ from backend.app.schemas.task_schema import (
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
-TASK_FIELDS = """
-    task_id,
-    seller_sku,
-    asin,
-    task_type,
-    task_title,
-    task_description,
-    priority,
-    risk_level,
-    suggested_action,
-    approval_required,
-    task_status,
-    created_at
-"""
+BASE_TASK_FIELDS = [
+    "task_id",
+    "seller_sku",
+    "asin",
+    "task_type",
+    "task_title",
+    "task_description",
+    "priority",
+    "risk_level",
+    "suggested_action",
+    "approval_required",
+    "task_status",
+    "created_at",
+]
+
+EXTENDED_TASK_FIELDS = {
+    "problem_type": "NULL",
+    "impact_level": "NULL",
+    "estimated_impact_value": "0",
+    "approval_level": "NULL",
+}
+
+
+def _columns(table_name: str) -> set[str]:
+    query = text(
+        """
+        SELECT COLUMN_NAME
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+        """
+    )
+    with engine.connect() as connection:
+        rows = connection.execute(query, {"table_name": table_name}).mappings().all()
+    return {str(row["COLUMN_NAME"]) for row in rows}
+
+
+def _task_fields_sql() -> str:
+    task_columns = _columns("inventory_agent_tasks")
+    fields = [f"t.{column}" for column in BASE_TASK_FIELDS]
+    for column, default_sql in EXTENDED_TASK_FIELDS.items():
+        if column in task_columns:
+            fields.append(f"t.{column}")
+        else:
+            fields.append(f"{default_sql} AS {column}")
+    return ",\n    ".join(fields)
 
 
 def _build_task_filters(
@@ -41,16 +73,16 @@ def _build_task_filters(
     clauses: list[str] = []
     params: dict[str, str] = {}
     if task_type:
-        clauses.append("task_type = :task_type")
+        clauses.append("t.task_type = :task_type")
         params["task_type"] = task_type
     if task_status:
-        clauses.append("task_status = :task_status")
+        clauses.append("t.task_status = :task_status")
         params["task_status"] = task_status
     if priority:
-        clauses.append("priority = :priority")
+        clauses.append("t.priority = :priority")
         params["priority"] = priority
     if seller_sku:
-        clauses.append("seller_sku LIKE :seller_sku")
+        clauses.append("t.seller_sku LIKE :seller_sku")
         params["seller_sku"] = f"%{seller_sku}%"
 
     if not clauses:
@@ -68,10 +100,10 @@ def list_tasks(
     where_sql, params = _build_task_filters(task_type, task_status, priority, seller_sku)
     query = text(
         f"""
-        SELECT {TASK_FIELDS}
-        FROM inventory_agent_tasks
+        SELECT {_task_fields_sql()}
+        FROM inventory_agent_tasks t
         {where_sql}
-        ORDER BY created_at DESC, id DESC
+        ORDER BY t.created_at DESC, t.id DESC
         """
     )
     with engine.connect() as connection:

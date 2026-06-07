@@ -133,6 +133,10 @@ p {
   margin-bottom: 14px;
 }
 
+.metrics-grid.expanded {
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+}
+
 .metric-card {
   min-height: 104px;
   padding: 16px;
@@ -161,8 +165,9 @@ p {
 .metric-value {
   margin-top: 12px;
   color: #111827;
-  font-size: 30px;
+  font-size: clamp(22px, 2vw, 30px);
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .filter-bar {
@@ -204,7 +209,7 @@ p {
 
 .data-table {
   width: 100%;
-  min-width: 1560px;
+  min-width: 1780px;
   border-collapse: collapse;
 }
 
@@ -286,13 +291,16 @@ p {
 .risk-badge.P3,
 .risk-badge.complete,
 .risk-badge.resolved,
-.risk-badge.keep_monitoring {
+.risk-badge.keep_monitoring,
+.risk-badge.stable,
+.risk-badge.none {
   background: #dcfce7;
   color: #15803d;
 }
 
 .risk-badge.unknown,
-.risk-badge.pending {
+.risk-badge.pending,
+.risk-badge.no_sales {
   background: #e0f2fe;
   color: #0369a1;
 }
@@ -311,6 +319,19 @@ p {
 .risk-badge.replenish_now {
   background: #fee2e2;
   color: #b91c1c;
+}
+
+.risk-badge.rising {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.risk-badge.declining,
+.risk-badge.operator,
+.risk-badge.manager,
+.risk-badge.owner {
+  background: #ffedd5;
+  color: #c2410c;
 }
 
 .task-list {
@@ -427,6 +448,33 @@ p {
   font-weight: 700;
 }
 
+.insight-impact-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.insight-impact-row > div {
+  min-width: 0;
+  border: 1px solid #edf1f5;
+  border-radius: 6px;
+  padding: 9px;
+  background: #f8fafc;
+}
+
+.insight-impact-row span {
+  display: block;
+  margin-bottom: 7px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.insight-impact-row strong {
+  color: #111827;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .insight-action {
   display: flex;
   align-items: center;
@@ -475,6 +523,33 @@ p {
 
 .task-meta span:last-child {
   border-right: 0;
+}
+
+.task-impact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.task-impact-grid > div {
+  border: 1px solid #edf1f5;
+  border-radius: 6px;
+  padding: 9px;
+  background: #f8fafc;
+}
+
+.task-impact-grid span {
+  display: block;
+  margin-bottom: 7px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.task-impact-grid strong {
+  color: #111827;
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .task-card p {
@@ -527,6 +602,58 @@ p {
 .detail-item strong {
   color: #111827;
   font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.intelligence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.intelligence-card {
+  border: 1px solid #d9e0e7;
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+}
+
+.intelligence-card h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.mini-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.mini-metric-grid .detail-item {
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.decision-explanation {
+  margin-top: 12px;
+  border: 1px solid #edf1f5;
+  border-radius: 6px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.decision-explanation span {
+  display: block;
+  margin-bottom: 8px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.decision-explanation p {
+  margin: 0;
+  color: #344054;
+  line-height: 1.6;
 }
 
 .reason-panel h2 {
@@ -578,6 +705,10 @@ p {
   grid-template-columns: repeat(4, minmax(160px, 1fr));
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.problem-summary-grid.expanded {
+  grid-template-columns: repeat(7, minmax(130px, 1fr));
 }
 
 .problem-panel {
@@ -672,8 +803,16 @@ p {
     grid-template-columns: repeat(4, minmax(140px, 1fr));
   }
 
+  .metrics-grid.expanded {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+
   .detail-grid {
     grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+
+  .intelligence-grid {
+    grid-template-columns: 1fr;
   }
 
   .insight-grid {
@@ -681,6 +820,7 @@ p {
   }
 
   .problem-summary-grid,
+  .problem-summary-grid.expanded,
   .key-data-grid {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
   }
@@ -716,9 +856,14 @@ p {
   .filter-bar,
   .detail-grid,
   .insight-grid,
+  .intelligence-grid,
   .problem-summary-grid,
+  .problem-summary-grid.expanded,
   .key-data-grid,
-  .task-card {
+  .task-card,
+  .task-impact-grid,
+  .insight-impact-row,
+  .mini-metric-grid {
     grid-template-columns: 1fr;
   }
 

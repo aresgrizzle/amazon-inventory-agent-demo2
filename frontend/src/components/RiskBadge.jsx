@@ -22,6 +22,14 @@ const labels = {
   pending: "pending",
   resolved: "resolved",
   ignored: "ignored",
+  rising: "rising",
+  stable: "stable",
+  declining: "declining",
+  no_sales: "no_sales",
+  none: "none",
+  operator: "operator",
+  manager: "manager",
+  owner: "owner",
 };
 
 function RiskBadge({ value }) {

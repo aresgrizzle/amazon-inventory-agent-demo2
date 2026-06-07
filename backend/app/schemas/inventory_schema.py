@@ -24,6 +24,21 @@ class InventoryAnalysisItem(BaseModel):
     action_reason: Optional[str]
     data_quality_status: str
     created_at: datetime
+    current_price: Optional[float] = None
+    landed_cost: Optional[float] = None
+    gross_margin: Optional[float] = None
+    sales_7d: Optional[int] = None
+    sales_30d: Optional[int] = None
+    sales_trend: Optional[str] = None
+    sales_trend_rate: Optional[float] = None
+    total_replenishment_lead_time_days: Optional[int] = None
+    target_cover_days: Optional[int] = None
+    moq: Optional[int] = None
+    stockout_risk_score: Optional[float] = None
+    overstock_risk_score: Optional[float] = None
+    estimated_lost_revenue: Optional[float] = None
+    decision_confidence: Optional[float] = None
+    decision_explanation: Optional[str] = None
 
 
 class DashboardSummary(BaseModel):
@@ -34,6 +49,11 @@ class DashboardSummary(BaseModel):
     data_missing_count: int
     pending_task_count: int
     total_tasks: int
+    estimated_lost_revenue_total: float = 0.0
+    high_impact_task_count: int = 0
+    avg_decision_confidence: Optional[float] = None
+    stockout_risk_score_avg: Optional[float] = None
+    overstock_risk_score_avg: Optional[float] = None
 
 
 class AgentRunResponse(BaseModel):

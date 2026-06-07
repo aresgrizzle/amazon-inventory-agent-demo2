@@ -1,10 +1,19 @@
 import RiskBadge from "./RiskBadge.jsx";
 
+function formatCurrency(value) {
+  const number = Number(value || 0);
+  return `$${number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatEmpty(value) {
+  return value === null || value === undefined || value === "" ? "-" : value;
+}
+
 function TaskCard({ task, onResolve, onIgnore, busy, readOnly = false }) {
   const isDone = task.task_status === "resolved" || task.task_status === "ignored";
 
   return (
-    <article className="task-card">
+    <article className={`task-card ${readOnly ? "read-only" : ""}`}>
       <div className="task-card-main">
         <div className="task-title-row">
           <h3>{task.task_title}</h3>
@@ -17,9 +26,29 @@ function TaskCard({ task, onResolve, onIgnore, busy, readOnly = false }) {
           <span>{task.seller_sku}</span>
           <span>{task.task_type}</span>
           <span>{task.suggested_action}</span>
-          <span>{task.approval_required ? "需要审批" : "无需审批"}</span>
+          <span>{task.approval_required ? "Approval required" : "No approval"}</span>
         </div>
-        <p>{task.task_description || "暂无任务描述"}</p>
+
+        <div className="task-impact-grid">
+          <div>
+            <span>Problem</span>
+            <strong>{formatEmpty(task.problem_type)}</strong>
+          </div>
+          <div>
+            <span>Impact</span>
+            <RiskBadge value={task.impact_level || "unknown"} />
+          </div>
+          <div>
+            <span>Est. Value</span>
+            <strong>{formatCurrency(task.estimated_impact_value)}</strong>
+          </div>
+          <div>
+            <span>Approval</span>
+            <strong>{formatEmpty(task.approval_level)}</strong>
+          </div>
+        </div>
+
+        <p>{task.task_description || "No task description available."}</p>
         <div className="task-foot">
           <span>Risk: <RiskBadge value={task.risk_level} /></span>
           <span>{new Date(task.created_at).toLocaleString()}</span>
@@ -28,10 +57,10 @@ function TaskCard({ task, onResolve, onIgnore, busy, readOnly = false }) {
       {!readOnly && (
         <div className="task-actions">
           <button type="button" disabled={busy || isDone} onClick={() => onResolve(task.task_id)}>
-            标记已解决
+            Mark resolved
           </button>
           <button type="button" disabled={busy || isDone} onClick={() => onIgnore(task.task_id)}>
-            忽略任务
+            Ignore task
           </button>
         </div>
       )}

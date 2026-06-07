@@ -1,15 +1,23 @@
 import RiskBadge from "./RiskBadge.jsx";
 
 function formatNumber(value, digits = 2) {
-  if (value === null || value === undefined) return "-";
+  if (value === null || value === undefined || value === "") return "-";
   const number = Number(value);
   if (Number.isNaN(number)) return value;
   return Number.isInteger(number) ? number : number.toFixed(digits);
 }
 
+function formatPercent(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  const number = Number(value);
+  if (Number.isNaN(number)) return "-";
+  const percent = Math.abs(number) <= 1 ? number * 100 : number;
+  return `${percent.toFixed(1)}%`;
+}
+
 function InventoryTable({ rows, onSelectSku }) {
   if (!rows.length) {
-    return <div className="empty-state">暂无数据</div>;
+    return <div className="empty-state">No data</div>;
   }
 
   return (
@@ -19,20 +27,23 @@ function InventoryTable({ rows, onSelectSku }) {
           <tr>
             <th>SKU</th>
             <th>ASIN</th>
-            <th>可售</th>
-            <th>总库存</th>
-            <th>有效在途</th>
-            <th>7日均销</th>
-            <th>30日均销</th>
-            <th>可售天数</th>
-            <th>覆盖天数</th>
-            <th>预计断货</th>
-            <th>断货风险</th>
-            <th>滞销风险</th>
-            <th>建议补货</th>
-            <th>建议动作</th>
-            <th>数据质量</th>
-            <th>建议原因</th>
+            <th>Available</th>
+            <th>Total</th>
+            <th>Inbound</th>
+            <th>7D Sales</th>
+            <th>30D Sales</th>
+            <th>Available Days</th>
+            <th>Cover Days</th>
+            <th>Stockout Date</th>
+            <th>Stockout Risk</th>
+            <th>Overstock Risk</th>
+            <th>Gross Margin</th>
+            <th>Sales Trend</th>
+            <th>Decision Confidence</th>
+            <th>Replenish Qty</th>
+            <th>Action</th>
+            <th>Data Quality</th>
+            <th>Reason</th>
           </tr>
         </thead>
         <tbody>
@@ -50,6 +61,9 @@ function InventoryTable({ rows, onSelectSku }) {
               <td>{row.estimated_stockout_date || "-"}</td>
               <td><RiskBadge value={row.stockout_risk_level} /></td>
               <td><RiskBadge value={row.overstock_risk_level} /></td>
+              <td>{formatPercent(row.gross_margin)}</td>
+              <td><RiskBadge value={row.sales_trend || "unknown"} /></td>
+              <td>{formatPercent(row.decision_confidence)}</td>
               <td>{row.recommended_replenishment_quantity}</td>
               <td><RiskBadge value={row.recommended_action} /></td>
               <td><RiskBadge value={row.data_quality_status} /></td>

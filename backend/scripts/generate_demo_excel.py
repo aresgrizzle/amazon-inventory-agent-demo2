@@ -29,6 +29,10 @@ PRODUCT_MASTER_COLUMNS = [
     "brand",
     "product_type",
     "category_name",
+    "current_price",
+    "purchase_cost",
+    "landed_cost",
+    "gross_margin",
     "condition_type",
     "fulfillment_channel",
     "listing_status",
@@ -71,6 +75,8 @@ SALES_SUMMARY_COLUMNS = [
     "sales_units_7d",
     "sales_units_14d",
     "sales_units_30d",
+    "sales_7d",
+    "sales_30d",
     "avg_daily_sales_3d",
     "avg_daily_sales_7d",
     "avg_daily_sales_30d",
@@ -93,8 +99,10 @@ REPLENISHMENT_CONFIG_COLUMNS = [
     "customs_clearance_days",
     "amazon_receiving_days",
     "total_replenishment_days",
+    "total_replenishment_lead_time_days",
     "safety_stock_days",
     "target_stock_days",
+    "target_cover_days",
     "max_stock_days",
     "moq",
     "carton_quantity",
@@ -139,6 +147,8 @@ def build_sku_plan() -> list[dict]:
 def product_row(item: dict) -> dict:
     sequence = item["sequence"]
     scenario_title = item["scenario_name"].replace(" SKU", "")
+    price, purchase_cost, landed_cost = profit_profile(item["scenario"], item["scenario_index"])
+    gross_margin = 0 if price <= 0 else round((price - landed_cost) / price, 4)
     return {
         "seller_id": SELLER_ID,
         "marketplace_id": MARKETPLACE_ID,
@@ -150,6 +160,10 @@ def product_row(item: dict) -> dict:
         "brand": "DemoBrand",
         "product_type": "home_storage",
         "category_name": "Home & Kitchen",
+        "current_price": price,
+        "purchase_cost": purchase_cost,
+        "landed_cost": landed_cost,
+        "gross_margin": gross_margin,
         "condition_type": "New",
         "fulfillment_channel": "FBA",
         "listing_status": "Active",
@@ -157,6 +171,19 @@ def product_row(item: dict) -> dict:
         "launch_date": TODAY - timedelta(days=90 + sequence * 7),
         "is_deleted": 0,
     }
+
+
+def profit_profile(scenario: str, index: int) -> tuple[float, float, float]:
+    profiles = {
+        "normal": (29.99 + index, 8.20 + index * 0.2, 13.80 + index * 0.35),
+        "high_stockout_risk": (34.99 + index, 9.50 + index * 0.25, 15.20 + index * 0.4),
+        "stockout": (39.99 + index, 10.20 + index * 0.25, 16.50 + index * 0.45),
+        "overstock": (21.99 + index * 0.5, 8.50 + index * 0.3, 17.80 + index * 0.5),
+        "large_inbound": (27.99 + index, 9.00 + index * 0.25, 16.20 + index * 0.45),
+        "unfulfillable_issue": (31.99 + index, 9.40 + index * 0.25, 15.90 + index * 0.35),
+        "data_missing": (24.99 + index, 9.10 + index * 0.25, 16.90 + index * 0.35),
+    }
+    return tuple(round(value, 2) for value in profiles[scenario])
 
 
 def lifecycle_stage(scenario: str) -> str:
@@ -306,6 +333,8 @@ def sales_row(item: dict) -> dict | None:
         "sales_units_7d": units_7d,
         "sales_units_14d": units_14d,
         "sales_units_30d": units_30d,
+        "sales_7d": units_7d,
+        "sales_30d": units_30d,
         "avg_daily_sales_3d": round(units_3d / 3, 2),
         "avg_daily_sales_7d": round(units_7d / 7, 2),
         "avg_daily_sales_30d": round(units_30d / 30, 2),
@@ -329,9 +358,11 @@ def trend_ratio(scenario: str, days: int) -> float:
 
 def sales_trend(scenario: str) -> str:
     if scenario in {"high_stockout_risk", "stockout"}:
-        return "up"
+        return "rising"
     if scenario == "overstock":
-        return "down"
+        return "declining"
+    if scenario == "data_missing":
+        return "stable"
     return "stable"
 
 
@@ -371,8 +402,10 @@ def config_row(item: dict) -> dict | None:
         "customs_clearance_days": customs,
         "amazon_receiving_days": receiving,
         "total_replenishment_days": total_days,
+        "total_replenishment_lead_time_days": total_days,
         "safety_stock_days": safety,
         "target_stock_days": target,
+        "target_cover_days": target,
         "max_stock_days": max_stock,
         "moq": 50,
         "carton_quantity": 24,

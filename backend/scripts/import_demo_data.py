@@ -45,6 +45,8 @@ NUMERIC_COLUMNS = {
         "sales_units_7d",
         "sales_units_14d",
         "sales_units_30d",
+        "sales_7d",
+        "sales_30d",
         "avg_daily_sales_3d",
         "avg_daily_sales_7d",
         "avg_daily_sales_30d",
@@ -59,8 +61,10 @@ NUMERIC_COLUMNS = {
         "customs_clearance_days",
         "amazon_receiving_days",
         "total_replenishment_days",
+        "total_replenishment_lead_time_days",
         "safety_stock_days",
         "target_stock_days",
+        "target_cover_days",
         "max_stock_days",
         "moq",
         "carton_quantity",
@@ -69,6 +73,10 @@ NUMERIC_COLUMNS = {
     ],
     "amazon_product_master": [
         "is_deleted",
+        "current_price",
+        "purchase_cost",
+        "landed_cost",
+        "gross_margin",
     ],
 }
 

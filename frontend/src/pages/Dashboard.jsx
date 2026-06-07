@@ -3,6 +3,18 @@ import { getDashboardAiSummary } from "../api/aiApi.js";
 import { fetchDashboardSummary, runInventoryAgent } from "../api/dashboardApi.js";
 import MetricCard from "../components/MetricCard.jsx";
 
+function formatCurrency(value) {
+  const number = Number(value || 0);
+  return `$${number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || value === "") return "N/A";
+  const number = Number(value);
+  if (Number.isNaN(number)) return "N/A";
+  return `${number.toFixed(1)}%`;
+}
+
 function AiPanel({ data, loading, error }) {
   return (
     <section className="ai-panel">
@@ -82,10 +94,10 @@ function Dashboard({ reloadKey, onAgentRun }) {
       <div className="page-header">
         <div>
           <h1>Dashboard</h1>
-          <p>库存风险、数据质量和待办任务总览</p>
+          <p>Inventory risk, decision quality, and operations workload overview</p>
         </div>
         <button className="primary-button" type="button" onClick={handleRunAgent} disabled={running}>
-          {running ? "运行中..." : "重新运行库存 Agent"}
+          {running ? "Running..." : "Run Inventory Agent"}
         </button>
       </div>
 
@@ -94,14 +106,25 @@ function Dashboard({ reloadKey, onAgentRun }) {
       {message && <div className="success-line">{message}</div>}
 
       {!loading && summary && (
-        <div className="metrics-grid">
-          <MetricCard label="总 SKU 数" value={summary.total_skus} />
-          <MetricCard label="Critical 断货风险" value={summary.critical_stockout_count} tone="danger" />
-          <MetricCard label="High 断货风险" value={summary.high_stockout_count} tone="warning" />
-          <MetricCard label="高滞销风险" value={summary.overstock_high_count} tone="warning" />
-          <MetricCard label="数据缺失" value={summary.data_missing_count} tone="info" />
-          <MetricCard label="待处理任务" value={summary.pending_task_count} tone="info" />
-          <MetricCard label="总任务数" value={summary.total_tasks} />
+        <div className="metrics-grid expanded">
+          <MetricCard label="Total SKUs" value={summary.total_skus} />
+          <MetricCard label="Critical Stockout" value={summary.critical_stockout_count} tone="danger" />
+          <MetricCard label="High Stockout" value={summary.high_stockout_count} tone="warning" />
+          <MetricCard label="High Overstock" value={summary.overstock_high_count} tone="warning" />
+          <MetricCard label="Data Missing" value={summary.data_missing_count} tone="info" />
+          <MetricCard label="Pending Tasks" value={summary.pending_task_count} tone="info" />
+          <MetricCard label="Total Tasks" value={summary.total_tasks} />
+          <MetricCard
+            label="Estimated Lost Revenue"
+            value={formatCurrency(summary.estimated_lost_revenue_total)}
+            tone="danger"
+          />
+          <MetricCard label="High Impact Tasks" value={summary.high_impact_task_count ?? 0} tone="warning" />
+          <MetricCard
+            label="Avg Decision Confidence"
+            value={formatPercent(summary.avg_decision_confidence)}
+            tone="info"
+          />
         </div>
       )}
 

@@ -19,6 +19,10 @@ class TaskItem(BaseModel):
     approval_required: bool
     task_status: str
     created_at: datetime
+    problem_type: Optional[str] = None
+    impact_level: Optional[str] = None
+    estimated_impact_value: Optional[float] = None
+    approval_level: Optional[str] = None
 
 
 class TaskStatusUpdateRequest(BaseModel):
