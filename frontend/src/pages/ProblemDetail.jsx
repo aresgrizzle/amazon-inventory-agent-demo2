@@ -10,14 +10,6 @@ function formatCurrency(value) {
   return `$${number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatPercent(value) {
-  if (value === null || value === undefined || value === "") return "N/A";
-  const number = Number(value);
-  if (Number.isNaN(number)) return "N/A";
-  const percent = Math.abs(number) <= 1 ? number * 100 : number;
-  return `${percent.toFixed(1)}%`;
-}
-
 function highestImpactLevel(tasks) {
   const order = { high: 3, medium: 2, low: 1, none: 0, unknown: 0 };
   return tasks.reduce((best, task) => {
@@ -40,12 +32,12 @@ function ProblemDetail({ insight, onBack }) {
       <section>
         <div className="page-header">
           <div>
-            <h1>Problem Detail</h1>
-            <p>No risk insight selected</p>
+            <h1>问题详情</h1>
+            <p>未选择风险问题卡片</p>
           </div>
-          <button className="secondary-button" type="button" onClick={onBack}>Back to Tasks</button>
+          <button className="secondary-button" type="button" onClick={onBack}>返回运营待办</button>
         </div>
-        <EmptyList>No data</EmptyList>
+        <EmptyList>暂无数据</EmptyList>
       </section>
     );
   }
@@ -63,96 +55,95 @@ function ProblemDetail({ insight, onBack }) {
       <div className="page-header">
         <div>
           <h1>{insight.title}</h1>
-          <p>Agent risk problem detail</p>
+          <p>库存 Agent 识别出的运营问题详情</p>
         </div>
-        <button className="secondary-button" type="button" onClick={onBack}>Back to Tasks</button>
+        <button className="secondary-button" type="button" onClick={onBack}>返回运营待办</button>
       </div>
 
       <div className="problem-summary-grid expanded">
         <div className="detail-item">
-          <span>Risk Level</span>
+          <span>风险等级</span>
           <RiskBadge value={insight.risk_level} />
         </div>
         <div className="detail-item">
-          <span>Priority</span>
+          <span>优先级</span>
           <RiskBadge value={insight.priority} />
         </div>
         <div className="detail-item">
-          <span>Impact Level</span>
+          <span>影响等级</span>
           <RiskBadge value={impactLevel} />
         </div>
         <div className="detail-item">
-          <span>Estimated Impact</span>
+          <span>预估影响金额</span>
           <strong>{formatCurrency(estimatedImpactValue)}</strong>
         </div>
         <div className="detail-item">
-          <span>Approval Level</span>
-          <strong>{approval}</strong>
+          <span>审批级别</span>
+          <RiskBadge value={approval} />
         </div>
         <div className="detail-item">
-          <span>Affected SKUs</span>
+          <span>涉及 SKU</span>
           <strong>{insight.affected_sku_count || 0}</strong>
         </div>
         <div className="detail-item">
-          <span>Related Tasks</span>
+          <span>关联待办</span>
           <strong>{insight.task_count || 0}</strong>
         </div>
       </div>
 
       <section className="problem-panel">
-        <h2>Problem Summary</h2>
-        <p>{insight.summary || "No problem summary available."}</p>
+        <h2>问题概述</h2>
+        <p>{insight.summary || "暂无问题概述。"}</p>
       </section>
 
       <section className="problem-panel">
-        <h2>Related SKUs</h2>
+        <h2>关联 SKU</h2>
         {insight.related_skus?.length ? (
           <div className="sku-chip-list">
             {insight.related_skus.map((sku) => <span key={sku}>{sku}</span>)}
           </div>
         ) : (
-          <EmptyList>No related SKUs</EmptyList>
+          <EmptyList>暂无关联 SKU</EmptyList>
         )}
       </section>
 
       <section className="problem-panel">
-        <h2>Key Data</h2>
+        <h2>关键数据</h2>
         <div className="key-data-grid">
-          <div><span>Recommended action</span><RiskBadge value={insight.recommended_action} /></div>
-          <div><span>Risk level</span><RiskBadge value={insight.risk_level} /></div>
-          <div><span>Priority</span><RiskBadge value={insight.priority} /></div>
-          <div><span>Impact level</span><RiskBadge value={impactLevel} /></div>
-          <div><span>Estimated impact</span><strong>{formatCurrency(estimatedImpactValue)}</strong></div>
-          <div><span>Approval level</span><strong>{approval}</strong></div>
-          <div><span>Task IDs</span><strong>{insight.related_task_ids?.length || 0}</strong></div>
-          <div><span>Avg confidence</span><strong>{formatPercent(null)}</strong></div>
+          <div><span>建议动作</span><RiskBadge value={insight.recommended_action} /></div>
+          <div><span>风险等级</span><RiskBadge value={insight.risk_level} /></div>
+          <div><span>优先级</span><RiskBadge value={insight.priority} /></div>
+          <div><span>影响等级</span><RiskBadge value={impactLevel} /></div>
+          <div><span>预估影响金额</span><strong>{formatCurrency(estimatedImpactValue)}</strong></div>
+          <div><span>审批级别</span><RiskBadge value={approval} /></div>
+          <div><span>关联任务数</span><strong>{insight.related_task_ids?.length || 0}</strong></div>
         </div>
       </section>
 
       <section className="problem-panel">
-        <h2>Risk Points</h2>
+        <h2>风险点</h2>
         {insight.risk_points?.length ? (
           <ul className="problem-list">
             {insight.risk_points.map((point) => <li key={point}>{point}</li>)}
           </ul>
         ) : (
-          <EmptyList>No risk points</EmptyList>
+          <EmptyList>暂无风险点</EmptyList>
         )}
       </section>
 
       <section className="problem-panel">
-        <h2>AI Solution</h2>
+        <h2>AI 处理建议</h2>
         {insight.solution?.length ? (
           <ul className="problem-list">
             {insight.solution.map((item) => <li key={item}>{item}</li>)}
           </ul>
         ) : (
-          <EmptyList>No solution available</EmptyList>
+          <EmptyList>暂无处理建议</EmptyList>
         )}
       </section>
 
       <section className="problem-panel">
-        <h2>Related Tasks</h2>
+        <h2>关联运营待办</h2>
         {relatedTasks.length ? (
           <div className="task-list">
             {relatedTasks.map((task) => (
@@ -165,7 +156,7 @@ function ProblemDetail({ insight, onBack }) {
             ))}
           </div>
         ) : (
-          <EmptyList>No related tasks</EmptyList>
+          <EmptyList>暂无关联待办</EmptyList>
         )}
       </section>
     </section>

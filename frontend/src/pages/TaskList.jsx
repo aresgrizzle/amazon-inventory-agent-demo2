@@ -12,7 +12,19 @@ const taskTypes = [
   "unfulfillable_inventory_alert",
   "data_missing_alert",
 ];
+const taskTypeLabels = {
+  stockout_warning: "断货预警",
+  replenishment_suggestion: "补货建议",
+  overstock_warning: "滞销/高库存",
+  unfulfillable_inventory_alert: "不可售异常",
+  data_missing_alert: "数据缺失",
+};
 const taskStatuses = ["", "pending", "resolved", "ignored"];
+const taskStatusLabels = {
+  pending: "待处理",
+  resolved: "已解决",
+  ignored: "已忽略",
+};
 const priorities = ["", "P0", "P1", "P2", "P3"];
 
 function RiskInsightCenter({ data, loading, error, tasks, onSelectInsight }) {
@@ -31,16 +43,16 @@ function RiskInsightCenter({ data, loading, error, tasks, onSelectInsight }) {
     <section className="risk-center">
       <div className="section-header">
         <div>
-          <h2>Risk Insight Center</h2>
-          <p>AI 将未完成任务归纳为可追踪的问题卡片</p>
+          <h2>风险洞察中心</h2>
+          <p>AI 将未完成待办归纳成可追踪、可处理的运营问题卡片</p>
         </div>
         {data?.generated_at && <span>{new Date(data.generated_at).toLocaleString()}</span>}
       </div>
 
-      {loading && <div className="state-line">Loading risk insights...</div>}
+      {loading && <div className="state-line">正在生成风险洞察...</div>}
       {!loading && error && <div className="error-line">{error}</div>}
       {!loading && !error && data?.configured === false && (
-        <div className="state-line">AI risk insights are not configured.</div>
+        <div className="state-line">AI 风险洞察暂未配置。</div>
       )}
       {!loading && !error && data?.error && <div className="error-line">{data.error}</div>}
       {!loading && !error && data?.configured !== false && insights.length === 0 && !data?.error && (
@@ -90,7 +102,7 @@ function TaskList({ reloadKey, onTaskUpdated, onSelectInsight }) {
         setAllTasks(nextTasks);
       }
     } catch (err) {
-      setError(err.message || "Task data failed to load");
+      setError(err.message || "运营待办加载失败");
     } finally {
       setLoading(false);
     }
@@ -106,7 +118,7 @@ function TaskList({ reloadKey, onTaskUpdated, onSelectInsight }) {
     try {
       setInsightData(await getTaskInsights());
     } catch (err) {
-      setInsightError(err.message || "Risk insights failed to load");
+      setInsightError(err.message || "风险洞察加载失败");
     } finally {
       setInsightLoading(false);
     }
@@ -138,7 +150,7 @@ function TaskList({ reloadKey, onTaskUpdated, onSelectInsight }) {
       await loadInsights();
       onTaskUpdated();
     } catch (err) {
-      setError(err.message || "Task status update failed");
+      setError(err.message || "任务状态更新失败");
     } finally {
       setBusyTaskId("");
     }
@@ -148,10 +160,10 @@ function TaskList({ reloadKey, onTaskUpdated, onSelectInsight }) {
     <section>
       <div className="page-header">
         <div>
-          <h1>Tasks</h1>
-          <p>库存 Agent 生成的运营待办</p>
+          <h1>运营待办</h1>
+          <p>库存 Agent 生成的补货、断货、滞销和数据补全任务</p>
         </div>
-        <div className="record-count">{tasks.length} tasks</div>
+        <div className="record-count">{tasks.length} 条</div>
       </div>
 
       <RiskInsightCenter
@@ -164,8 +176,8 @@ function TaskList({ reloadKey, onTaskUpdated, onSelectInsight }) {
 
       <div className="section-header task-section-header">
         <div>
-          <h2>Task List</h2>
-          <p>按任务类型、状态、优先级和 SKU 筛选原始任务</p>
+          <h2>任务明细</h2>
+          <p>按任务类型、处理状态、优先级和 SKU 筛选原始待办</p>
         </div>
       </div>
 
@@ -177,12 +189,12 @@ function TaskList({ reloadKey, onTaskUpdated, onSelectInsight }) {
         />
         <select value={filters.task_type} onChange={(event) => updateFilter("task_type", event.target.value)}>
           {taskTypes.map((option) => (
-            <option key={option} value={option}>{option || "任务类型"}</option>
+            <option key={option} value={option}>{option ? taskTypeLabels[option] : "任务类型"}</option>
           ))}
         </select>
         <select value={filters.task_status} onChange={(event) => updateFilter("task_status", event.target.value)}>
           {taskStatuses.map((option) => (
-            <option key={option} value={option}>{option || "任务状态"}</option>
+            <option key={option} value={option}>{option ? taskStatusLabels[option] : "处理状态"}</option>
           ))}
         </select>
         <select value={filters.priority} onChange={(event) => updateFilter("priority", event.target.value)}>
@@ -192,7 +204,7 @@ function TaskList({ reloadKey, onTaskUpdated, onSelectInsight }) {
         </select>
       </div>
 
-      {loading && <div className="state-line">Loading...</div>}
+      {loading && <div className="state-line">正在加载运营待办...</div>}
       {error && <div className="error-line">{error}</div>}
       {!loading && !error && tasks.length === 0 && <div className="empty-state">暂无数据</div>}
       {!loading && !error && tasks.length > 0 && (

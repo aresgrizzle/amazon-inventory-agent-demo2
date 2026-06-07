@@ -17,7 +17,7 @@ function formatPercent(value) {
 
 function InventoryTable({ rows, onSelectSku }) {
   if (!rows.length) {
-    return <div className="empty-state">No data</div>;
+    return <div className="empty-state">暂无数据</div>;
   }
 
   return (
@@ -27,23 +27,23 @@ function InventoryTable({ rows, onSelectSku }) {
           <tr>
             <th>SKU</th>
             <th>ASIN</th>
-            <th>Available</th>
-            <th>Total</th>
-            <th>Inbound</th>
-            <th>7D Sales</th>
-            <th>30D Sales</th>
-            <th>Available Days</th>
-            <th>Cover Days</th>
-            <th>Stockout Date</th>
-            <th>Stockout Risk</th>
-            <th>Overstock Risk</th>
-            <th>Gross Margin</th>
-            <th>Sales Trend</th>
-            <th>Decision Confidence</th>
-            <th>Replenish Qty</th>
-            <th>Action</th>
-            <th>Data Quality</th>
-            <th>Reason</th>
+            <th>可售库存</th>
+            <th>总库存</th>
+            <th>有效在途</th>
+            <th>7日均销</th>
+            <th>30日均销</th>
+            <th>可售天数</th>
+            <th>覆盖天数</th>
+            <th>预计断货日</th>
+            <th>断货风险</th>
+            <th>滞销风险</th>
+            <th>毛利率</th>
+            <th>销量趋势</th>
+            <th>决策置信度</th>
+            <th>建议补货量</th>
+            <th>建议动作</th>
+            <th>数据质量</th>
+            <th>判断原因</th>
           </tr>
         </thead>
         <tbody>

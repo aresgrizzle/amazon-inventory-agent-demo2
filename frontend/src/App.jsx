@@ -6,9 +6,9 @@ import TaskList from "./pages/TaskList.jsx";
 import SkuDetail from "./pages/SkuDetail.jsx";
 
 const navItems = [
-  { key: "dashboard", label: "Dashboard" },
-  { key: "inventory", label: "Inventory" },
-  { key: "tasks", label: "Tasks" },
+  { key: "dashboard", label: "经营看板" },
+  { key: "inventory", label: "库存诊断" },
+  { key: "tasks", label: "运营待办" },
 ];
 
 function App() {
@@ -47,10 +47,10 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <div>
-          <div className="brand">Amazon Inventory Agent</div>
-          <div className="subbrand">MVP operations dashboard</div>
+          <div className="brand">亚马逊库存 Agent</div>
+          <div className="subbrand">跨境电商库存运营工作台</div>
         </div>
-        <nav className="nav-tabs" aria-label="Primary">
+        <nav className="nav-tabs" aria-label="主导航">
           {navItems.map((item) => (
             <button
               key={item.key}
