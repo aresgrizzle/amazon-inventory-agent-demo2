@@ -17,6 +17,7 @@ from backend.app.services.ai_service import (
     generate_sku_analysis,
     generate_task_insights,
     generate_task_priority,
+    build_fallback_task_insights,
     is_ai_configured,
 )
 
@@ -94,24 +95,33 @@ def get_ai_task_priority() -> dict[str, object]:
 
 @router.get("/task-insights")
 def get_ai_task_insights() -> dict[str, object]:
+    open_tasks = get_open_tasks(limit=50)
+    top_risk_skus = get_top_risk_skus(limit=20)
+
     if not is_ai_configured():
         return {
             "configured": False,
             "message": "AI service is not configured",
-            "insights": [],
+            "insights": build_fallback_task_insights(
+                open_tasks=open_tasks,
+                top_risk_skus=top_risk_skus,
+            ),
         }
 
     try:
         insights = generate_task_insights(
-            open_tasks=get_open_tasks(limit=50),
-            top_risk_skus=get_top_risk_skus(limit=20),
+            open_tasks=open_tasks,
+            top_risk_skus=top_risk_skus,
             risk_distribution=get_risk_distribution(),
         )
-    except (RuntimeError, ValueError) as exc:
+    except RuntimeError as exc:
         return {
             "configured": True,
-            "insights": [],
-            "error": str(exc),
+            "insights": build_fallback_task_insights(
+                open_tasks=open_tasks,
+                top_risk_skus=top_risk_skus,
+            ),
+            "warning": str(exc),
             "generated_at": datetime.utcnow().isoformat(),
         }
 

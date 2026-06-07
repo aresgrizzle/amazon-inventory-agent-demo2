@@ -62,7 +62,10 @@ def generate_task_insights(
         risk_distribution=risk_distribution,
     )
     raw_text = _call_openai(prompt)
-    return _parse_task_insights(raw_text)
+    try:
+        return _parse_task_insights(raw_text)
+    except ValueError:
+        return build_fallback_task_insights(open_tasks=open_tasks, top_risk_skus=top_risk_skus)
 
 
 def _call_openai(prompt: str) -> str:
@@ -300,6 +303,135 @@ def _to_string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if item is not None and str(item).strip()]
+
+
+def build_fallback_task_insights(
+    open_tasks: list[dict[str, Any]],
+    top_risk_skus: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    sku_lookup = {str(sku.get("seller_sku")): sku for sku in top_risk_skus}
+
+    groups = [
+        {
+            "id": "critical_stockout",
+            "title": "Critical stockout risk",
+            "risk_level": "critical",
+            "priority": "P0",
+            "recommended_action": "replenish_now",
+            "match": lambda task: task.get("risk_level") == "critical"
+            or task.get("priority") == "P0",
+            "summary": "存在 critical 断货或已断货任务，需要作为最高优先级处理。",
+            "risk_points": ["部分 SKU 处于 critical 断货风险", "继续延迟可能造成销售损失和排名波动"],
+            "solution": ["优先确认可售库存为 0 或可售天数极低的 SKU", "立即确认供应商交期并创建补货计划", "断货期间谨慎控制广告放量"],
+        },
+        {
+            "id": "high_stockout",
+            "title": "High stockout risk",
+            "risk_level": "high",
+            "priority": "P1",
+            "recommended_action": "replenish_now",
+            "match": lambda task: task.get("risk_level") == "high"
+            or task.get("task_type") == "stockout_warning",
+            "summary": "存在 high 断货风险任务，需要尽快排入补货处理队列。",
+            "risk_points": ["部分 SKU 可售库存偏低", "补货不及时会进入 critical 风险区间"],
+            "solution": ["按预计断货日期排序处理", "核对在途库存和实际可售库存", "提前确认采购和入仓计划"],
+        },
+        {
+            "id": "overstock_risk",
+            "title": "Overstock and slow-moving risk",
+            "risk_level": "high",
+            "priority": "P1",
+            "recommended_action": "clearance_or_reduce_replenishment",
+            "match": lambda task: task.get("task_type") == "overstock_warning",
+            "summary": "存在高库存或滞销风险，需要控制后续补货并评估清仓动作。",
+            "risk_points": ["部分 SKU 库存覆盖天数偏高", "库存占用可能影响现金流和仓储成本"],
+            "solution": ["暂停或降低相关 SKU 补货计划", "评估优惠、清仓或广告去库存策略", "复查近 30 日销量趋势"],
+        },
+        {
+            "id": "data_missing",
+            "title": "Data quality issue",
+            "risk_level": "unknown",
+            "priority": "P2",
+            "recommended_action": "complete_missing_data",
+            "match": lambda task: task.get("task_type") == "data_missing_alert"
+            or task.get("suggested_action") == "complete_missing_data",
+            "summary": "存在数据缺失任务，影响系统判断销量、补货或风险状态。",
+            "risk_points": ["销量或补货配置缺失会降低分析可信度", "数据不完整会影响补货和清仓决策"],
+            "solution": ["优先补齐 sales_summary 和 replenishment_config", "重新运行库存 Agent", "复核数据质量状态是否恢复 complete"],
+        },
+        {
+            "id": "unfulfillable_inventory",
+            "title": "Unfulfillable inventory alert",
+            "risk_level": "medium",
+            "priority": "P2",
+            "recommended_action": "keep_monitoring",
+            "match": lambda task: task.get("task_type") == "unfulfillable_inventory_alert",
+            "summary": "存在不可售库存异常任务，需要检查库存状态并处理异常库存。",
+            "risk_points": ["不可售库存会降低实际可售能力", "异常库存可能带来仓储成本和运营误判"],
+            "solution": ["检查 FBA 不可售原因", "安排移除、弃置或重新上架流程", "同步更新库存快照后重新分析"],
+        },
+    ]
+
+    insights: list[dict[str, Any]] = []
+    used_task_ids: set[str] = set()
+    for group in groups:
+        matched_tasks = [
+            task
+            for task in open_tasks
+            if str(task.get("task_id")) not in used_task_ids and group["match"](task)
+        ]
+        if not matched_tasks:
+            continue
+        insights.append(_build_group_insight(group, matched_tasks, sku_lookup))
+        used_task_ids.update(str(task.get("task_id")) for task in matched_tasks)
+
+    remaining_tasks = [
+        task for task in open_tasks if str(task.get("task_id")) not in used_task_ids
+    ]
+    if remaining_tasks:
+        group = {
+            "id": "other_pending_tasks",
+            "title": "Other pending operations tasks",
+            "risk_level": "medium",
+            "priority": "P3",
+            "recommended_action": "keep_monitoring",
+            "summary": "仍有其他待处理任务，需要在高风险问题处理后继续跟进。",
+            "risk_points": ["部分任务未归入高风险分组", "仍需保持任务闭环"],
+            "solution": ["按优先级逐项处理", "处理后刷新任务状态", "必要时重新运行库存 Agent"],
+        }
+        insights.append(_build_group_insight(group, remaining_tasks, sku_lookup))
+
+    return insights
+
+
+def _build_group_insight(
+    group: dict[str, Any],
+    tasks: list[dict[str, Any]],
+    sku_lookup: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    related_skus = sorted({str(task.get("seller_sku")) for task in tasks if task.get("seller_sku")})
+    related_task_ids = [str(task.get("task_id")) for task in tasks if task.get("task_id")]
+    risk_points = list(group["risk_points"])
+
+    for sku in related_skus[:3]:
+        sku_data = sku_lookup.get(sku)
+        if sku_data and sku_data.get("available_days") is not None:
+            risk_points.append(f"{sku} 当前可售天数约为 {sku_data.get('available_days')} 天")
+
+    return {
+        "id": group["id"],
+        "title": group["title"],
+        "risk_level": group["risk_level"],
+        "priority": group["priority"],
+        "affected_sku_count": len(related_skus),
+        "task_count": len(tasks),
+        "summary": group["summary"],
+        "recommended_action": group["recommended_action"],
+        "risk_points": risk_points,
+        "solution": list(group["solution"]),
+        "related_skus": related_skus,
+        "related_task_ids": related_task_ids,
+    }
 
 
 def _to_json(value: Any) -> str:
